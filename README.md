@@ -1,5 +1,10 @@
 # AIAAM
 Advanced Investment analysis and management
+  ---
+  B1-807
+  Giờ học: 17g45->21g10
+  GV: TS.Đỗ Như Tài
+  Email: taidn@ueh.edu.vn
 
 # Members
   1. cisvo - Võ Duy Huy Hoàng - 87243020093
