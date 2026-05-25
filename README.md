@@ -2,10 +2,10 @@
 Advanced Investment analysis and management
 
 # Members
-  1. das
-  2. das
-  3. asd
-  4. asd
+  1. cisvo - Võ Duy Huy Hoàng - 87243020093
+  2. das - Bảo -
+  3. asd - Hường -
+  4. asd - Khoa -
 
 # Tasks management
   | STT | Task | Mô tả chi tiết | Ngày Khởi tạo | Due date |
