@@ -15,9 +15,9 @@ Advanced Investment analysis and management
   4. asd - Khoa -
 
 # USER GUIDE LINE
-  File README.md 
+  File README.md: Hướng dẫn tổng quát để có overall
   
-  File note.md
+  File note.md: Chủ động note những thông tin trong hoặc sau mỗi buổi học
 
   **Chú ý: Trước mỗi lần commit, mỗi thành viên nhớ review lại những thay đổi của mình tránh vô ý thay đổi/xóa/thêm thông tin sai lệch không cần thiết**
   
