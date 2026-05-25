@@ -16,6 +16,8 @@ Advanced Investment analysis and management
   File README.md 
   
   File note.md
+
+  **Chú ý: Trước mỗi lần commit, mỗi thành viên nhớ review lại những thay đổi của mình tránh vô ý thay đổi/xóa/thêm thông tin sai lệch không cần thiết**
   
 
 # Tasks management
