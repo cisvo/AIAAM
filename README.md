@@ -14,7 +14,9 @@ Advanced Investment analysis and management
 
 # USER GUIDE LINE
   File README.md 
+  
   File note.md
+  
 
 # Tasks management
   | STT | Task | Mô tả chi tiết | Ngày Khởi tạo | Due date |
