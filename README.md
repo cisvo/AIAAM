@@ -12,6 +12,10 @@ Advanced Investment analysis and management
   3. asd - Hường -
   4. asd - Khoa -
 
+# USER GUIDE LINE
+  File README.md 
+  File note.md
+
 # Tasks management
   | STT | Task | Mô tả chi tiết | Ngày Khởi tạo | Due date |
 | :---: | :--- | :--- | :---: | :---: |
