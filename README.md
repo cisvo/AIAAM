@@ -19,7 +19,9 @@ Advanced Investment analysis and management
   
   File note.md
 
-  **Chú ý: Trước mỗi lần commit, mỗi thành viên nhớ review lại những thay đổi của mình tránh vô ý thay đổi/xóa/thêm thông tin sai lệch không cần thiết**
+  **Chú ý: Trước mỗi lần commit, mỗi thành viên nhớ review lại những thay đổi của mình tránh vô ý thay đổi/xóa/thêm thông tin sai lệch không cần thiết
+  
+  - Nêu 1 member thay đổi quá nhiều, hãy tạo mới 1 new branch và tạo request để merge ngược lại tới main branch**
   
 
 # Tasks management
