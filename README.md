@@ -10,9 +10,8 @@ Advanced Investment analysis and management
 
 # Members
   1. cisvo - Võ Duy Huy Hoàng - 87243020093
-  2. das - Bảo -
-  3. asd - Hường -
-  4. asd - Khoa -
+  2. HuongHana - Hường -
+  3. khoanguyen88234020092 - Khoa -
 
 # USER GUIDE LINE
   File README.md: Hướng dẫn tổng quát để có overall
