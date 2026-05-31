@@ -25,7 +25,7 @@ Advanced Investment analysis and management
   - Nếu 1 member thay đổi quá nhiều, hãy tạo mới 1 new branch và tạo request để merge ngược lại tới main branch
   
 
-# Tasks management Lab01
+# Tasks management
 
 | STT | US | Task | Đánh giá % hoàn thành | Ngày Khởi tạo | Due date | PIC | Status |
 | :---: | :---: | :--- | :---: | :---: | :---: | :---: | :---: |
