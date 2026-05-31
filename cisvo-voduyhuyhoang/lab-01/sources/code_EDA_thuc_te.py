@@ -8,7 +8,7 @@ import seaborn as sns
 import warnings
 warnings.filterwarnings('ignore')
 
-BASE = '/home/claude/eda_real/'
+BASE = '/home/yourpath/sources/'
 
 # ============================================================
 # PHẦN 1 - NHIỆM VỤ 1: COVID (dùng file thật)
