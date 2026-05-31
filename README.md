@@ -9,8 +9,8 @@ Advanced Investment analysis and management
   Email: taidn@ueh.edu.vn
 
 # Members
-  1. cisvo - Võ Duy Huy Hoàng - 87243020093
-  2. HuongHana - Hường -
+  1. cisvo(hoangwoo) - Võ Duy Huy Hoàng - 87243020093
+  2. HuongHana - Hoàng Thị Hường -
   3. khoanguyen88234020092 - Khoa -
 
 # USER GUIDE LINE
