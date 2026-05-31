@@ -1,3 +1,9 @@
+# Tổng quan về lab:
+  - yeucau folder: Yêu cầu đề tài bài tập
+  - ketqua folder: Kết quả bài tập
+  - sources: Tổng hợp các files, tài liệu nghiên cứu và có/thu được trong quá trình làm bài
+
+
 # Hướng dẫn chạy file code_EDA_thuc_te.py
 
 ### Bước 1: Cài đặt Python (nếu chưa có)
