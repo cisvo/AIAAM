@@ -29,4 +29,4 @@ Advanced Investment analysis and management
 | :---: | :--- | :---: | :---: | :---: | :---: |
 | 1 | • Làm word<br>• Xem Thống kê mô tả phần lý thuyết<br>• Output: cá nhân có thể làm đủ task hoặc hơn, kết quả trong folder huong | | 25/05/2026 | 30/05/2026 | Hường |
 | 2 | • Xử lý dữ liệu<br>• Trực quan hóa dữ liệu<br>• Output: cá nhân có thể làm đủ task hoặc hơn, kết quả trong folder khoa | | 25/05/2026 | 31/05/2026 | Khoa |
-| 3 | • Phân tích đơn biến và hai biến<br>• Thống kê mô tả phần bài tập thực hành<br>• Review bài của members và nhóm<br>• Output: cá nhân có thể làm đủ task hoặc hơn, kết quả cá nhân trong folder voduyhuyhoang  | | 25/05/2026 | 30/05/2026 | Hoàng |
+| 3 | • Phần 1: Thống kê mô tả (Lý thuyết và bài tập thực hành)<br>• Phần 2: Trực quan hoá dữ liệu (Lý thuyết)<br>• Phần 3: Phân tích đơn biến và hai biến (Lý thuyết và bài tập thực hành)<br>• Review bài của members và nhóm<br>• Output: cá nhân có thể làm đủ task hoặc hơn, kết quả cá nhân trong folder voduyhuyhoang  | | 25/05/2026 | 30/05/2026 | Hoàng |
