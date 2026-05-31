@@ -25,8 +25,10 @@ Advanced Investment analysis and management
 
 # Tasks management Lab01
 
+# Tasks management Lab01
+
 | STT | Task | Đánh giá thành viên | Ngày Khởi tạo | Due date | PIC |
-| :---: | :--- | :--- | :---: | :---: | :---: |
-| 1 | Làm word và xem Thống kê mô tả phần lý thuyết | | 25/05/2026 | 30/05/2026 | Hường |
-| 2 | Xử lý và trực quan hóa dữ liệu | | 25/05/2026 | 31/05/2026 | Khoa |
-| 3 | Phân tích đơn biến và hai biến và Thống kê mô tả phần bài tập thực hành; Review bài của members và nhóm | | 25/05/2026 | 30/05/2026 | Hoàng |
+| :---: | :--- | :---: | :---: | :---: | :---: |
+| 1 | • Làm word<br>• Xem Thống kê mô tả phần lý thuyết | | 25/05/2026 | 30/05/2026 | Hường |
+| 2 | • Xử lý dữ liệu<br>• Trực quan hóa dữ liệu | | 25/05/2026 | 31/05/2026 | Khoa |
+| 3 | • Phân tích đơn biến và hai biến<br>• Thống kê mô tả phần bài tập thực hành<br>• Review bài của members và nhóm | | 25/05/2026 | 30/05/2026 | Hoàng |
