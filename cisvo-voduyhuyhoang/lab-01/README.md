@@ -8,7 +8,7 @@
 Tạo 1 thư mục trên máy, đặt tất cả vào đó:
 
 ```
-📁 EDA_Project/
+📁 sources/
 ├── code_EDA_thuc_te.py
 ├── owid-covid-data.csv
 ├── marketing_campaign.csv
