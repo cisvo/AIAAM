@@ -29,10 +29,10 @@ Advanced Investment analysis and management
 
 | STT | US | Type | Task | Đánh giá % hoàn thành | Ngày Khởi tạo | Due date | PIC | Status |
 | :---: | :---: | :---: | :--- | :---: | :---: | :---: | :---: | :---: |
-| 1 | LAB01 | nhóm | • Làm word<br>• Phần 1: Xem Thống kê mô tả (phần lý thuyết)<br>• Output: cá nhân có thể làm đủ task hoặc hơn, kết quả trong folder huong | 0% | 25/05/2026 | 30/05/2026 | Hường | Inprogress |
-| 2 | LAB01 | nhóm | • Phần 2 Xử lý và Trực quan hóa dữ liệu (bài tập thực hành)<br>• Output: cá nhân có thể làm đủ task hoặc hơn, kết quả trong folder khoa | 0% | 25/05/2026 | 31/05/2026 | Khoa | Inprogress |
-| 3 | LAB01 | nhóm | • Phần 1: Thống kê mô tả (Lý thuyết và bài tập thực hành)<br>• Phần 2: Xử lý và Trực quan hóa dữ liệu (Lý thuyết)<br>• Phần 3: Phân tích đơn biến và hai biến (Lý thuyết và bài tập thực hành)<br>• Review bài của members và nhóm<br>• Output: cá nhân có thể làm đủ task hoặc hơn, kết quả cá nhân trong folder voduyhuyhoang | 0% | 25/05/2026 | 30/05/2026 | Hoàng | Inprogress |
-| 4 | LAB-OCR | cá nhân | Bài tập cá nhân làm thêm • Scan paper để extract thông tin cho việc nghiên cứu ra quyết định | | | | | Inprogress |
+| 1 | LAB01 | Nhóm | • Làm word<br>• Phần 1: Xem Thống kê mô tả (phần lý thuyết)<br>• Output: cá nhân có thể làm đủ task hoặc hơn, kết quả trong folder huong | 0% | 25/05/2026 | 30/05/2026 | Hường | Inprogress |
+| 2 | LAB01 | Nhóm | • Phần 2 Xử lý và Trực quan hóa dữ liệu (bài tập thực hành)<br>• Output: cá nhân có thể làm đủ task hoặc hơn, kết quả trong folder khoa | 0% | 25/05/2026 | 31/05/2026 | Khoa | Inprogress |
+| 3 | LAB01 | Nhóm | • Phần 1: Thống kê mô tả (Lý thuyết và bài tập thực hành)<br>• Phần 2: Xử lý và Trực quan hóa dữ liệu (Lý thuyết)<br>• Phần 3: Phân tích đơn biến và hai biến (Lý thuyết và bài tập thực hành)<br>• Review bài của members và nhóm<br>• Output: cá nhân có thể làm đủ task hoặc hơn, kết quả cá nhân trong folder voduyhuyhoang | 0% | 25/05/2026 | 30/05/2026 | Hoàng | Inprogress |
+| 4 | LAB-OCR | Cá nhân | Bài tập cá nhân làm thêm • Scan paper để extract thông tin cho việc nghiên cứu ra quyết định | | | | | Inprogress |
 | 5 | LAB02 | | | | | | | Todo |
 | 6 | LAB03 | | | | | | | Todo |
 | 7 | LAB04 | | | | | | | Todo |
