@@ -25,8 +25,6 @@ Advanced Investment analysis and management
 
 # Tasks management Lab01
 
-# Tasks management Lab01
-
 | STT | Task | Đánh giá thành viên | Ngày Khởi tạo | Due date | PIC |
 | :---: | :--- | :---: | :---: | :---: | :---: |
 | 1 | • Làm word<br>• Xem Thống kê mô tả phần lý thuyết<br>• Output: cá nhân có thể làm đủ task hoặc hơn, kết quả trong folder huong | | 25/05/2026 | 30/05/2026 | Hường |
