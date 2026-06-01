@@ -4,5 +4,9 @@
 
 > **📌 Yêu cầu:** Các thành viên chủ động take note, đóng góp tới nhóm tại file này trong và sau buổi học.
 
-* [Điền note của bạn vào đây...]
-* [Điền note của bạn vào đây...]
+* [https://docs.streamlit.io/develop/tutorials/chat-and-llm-apps/build-conversational-apps
+* Là 1 platform giúp build nhanh các web phụ trợ cho các nhà kỹ sư Machine Learning (Học máy), Data Science (Khoa học dữ liệu)
+* ]
+* [Các mô hình: CAPM, MVPT(Mean-Variance Portfolio Theory)]
+
+
