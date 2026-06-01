@@ -14,6 +14,7 @@
 * https://www.coze.com/template/workflow/7424043643545255943?entity_type=23
 * https://crewai.com/ n8n
 * https://huggingface.co/spaces/skytnt/midi-composer
+* https://github.com/letieu/trade-bot
 
 
 
