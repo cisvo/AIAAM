@@ -15,6 +15,9 @@
 * https://crewai.com/ n8n
 * https://huggingface.co/spaces/skytnt/midi-composer
 * https://github.com/letieu/trade-bot
+* https://deepmind.google/research/alphazero-and-muzero/
+* https://github.com/AI4Finance-Foundation/FinRL
+* 
 
 
 
