@@ -17,7 +17,8 @@
 * https://github.com/letieu/trade-bot
 * https://deepmind.google/research/alphazero-and-muzero/
 * https://github.com/AI4Finance-Foundation/FinRL
-* 
+* https://keras.io/
+* https://pytorch.org/
 
 
 
