@@ -3,6 +3,7 @@ yfinance
 vnstock
 pandas
 numpy
+scipy
 plotly
 matplotlib
 statsmodels

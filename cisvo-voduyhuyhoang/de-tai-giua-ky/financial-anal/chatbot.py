@@ -65,3 +65,24 @@ def ask_chatbot(client, messages: list, context: str, model: str = DEFAULT_MODEL
         messages=messages,
     )
     return "".join(block.text for block in response.content if block.type == "text")
+
+
+def summarize_news(client, symbol: str, headlines: list, model: str = DEFAULT_MODEL) -> str:
+    """
+    headlines: list[str] các tiêu đề tin tức (chỉ tiêu đề, không phải nội dung đầy đủ bài báo).
+    Trả về đoạn tóm tắt chủ đề chính + đánh giá khách quan mức độ ảnh hưởng tới giá cổ phiếu.
+    """
+    joined = "\n".join(f"- {h}" for h in headlines)
+    prompt = (
+        f"Đây là các tiêu đề tin tức gần đây về mã {symbol}:\n{joined}\n\n"
+        "Hãy tóm tắt ngắn gọn các chủ đề chính, rồi đánh giá khách quan mức độ những tin tức này "
+        "có thể ảnh hưởng tích cực / tiêu cực / trung lập tới giá cổ phiếu, kèm giải thích. "
+        "Nhắc rõ đây chỉ là diễn giải dựa trên tiêu đề (không phải phân tích chuyên sâu từ nội dung "
+        "đầy đủ) và không phải lời khuyên đầu tư."
+    )
+    response = client.messages.create(
+        model=model, max_tokens=700,
+        system="Bạn là trợ lý tài chính, trả lời ngắn gọn, khách quan, bằng tiếng Việt.",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return "".join(block.text for block in response.content if block.type == "text")

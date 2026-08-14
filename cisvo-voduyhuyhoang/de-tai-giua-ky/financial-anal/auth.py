@@ -31,7 +31,10 @@ def require_login() -> bool:
         st.title("🔒 FinDash-VN — Đăng nhập")
         pwd = st.text_input("Mật khẩu truy cập", type="password")
         if st.button("Đăng nhập", type="primary"):
-            expected = st.secrets.get("auth", {}).get("password")
+            try:
+                expected = st.secrets.get("auth", {}).get("password")
+            except Exception:
+                expected = None  # chưa có file .streamlit/secrets.toml
             if expected and pwd == expected:
                 st.session_state["authenticated"] = True
                 st.rerun()

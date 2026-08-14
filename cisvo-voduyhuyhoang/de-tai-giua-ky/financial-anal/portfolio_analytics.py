@@ -11,6 +11,7 @@ trừ khi ghi chú khác.
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from scipy.optimize import minimize
 
 TRADING_DAYS = 252
 
@@ -158,3 +159,150 @@ def value_at_risk(ending_values: np.ndarray, initial_value: float, confidence: f
     tail_losses = ending_values[ending_values <= threshold]
     cvar = initial_value - float(tail_losses.mean()) if len(tail_losses) > 0 else var
     return {"threshold_value": threshold, "VaR": var, "CVaR": cvar}
+
+
+# ---------------------------------------------------------------------------
+# Chỉ số rủi ro nâng cao: Max Drawdown, Sortino Ratio, Calmar Ratio
+# ---------------------------------------------------------------------------
+def portfolio_equity_curve(returns_df: pd.DataFrame, weights: np.ndarray,
+                            initial_value: float = 100.0) -> pd.Series:
+    """Đường giá trị danh mục theo thời gian, dựa trên lợi suất log lịch sử (mua & giữ, không tái cân bằng)."""
+    port_daily_return = returns_df.values @ weights  # log-return danh mục mỗi ngày
+    equity = initial_value * np.exp(np.cumsum(port_daily_return))
+    return pd.Series(equity, index=returns_df.index)
+
+
+def max_drawdown(equity_curve: pd.Series) -> dict:
+    """Mức sụt giảm tối đa từ đỉnh trước đó. Trả về mdd (số âm) và chuỗi drawdown theo thời gian."""
+    running_max = equity_curve.cummax()
+    drawdown = equity_curve / running_max - 1
+    return {"max_drawdown": float(drawdown.min()), "drawdown_series": drawdown}
+
+
+def sortino_ratio(daily_returns: pd.Series, rf_annual: float) -> float:
+    """Giống Sharpe nhưng chỉ phạt độ lệch chuẩn của lợi suất ÂM (downside deviation)."""
+    rf_daily = rf_annual / TRADING_DAYS
+    excess = daily_returns - rf_daily
+    downside = excess[excess < 0]
+    if len(downside) == 0:
+        return np.nan
+    downside_std = downside.std() * np.sqrt(TRADING_DAYS)
+    ann_excess_return = excess.mean() * TRADING_DAYS
+    if downside_std == 0 or np.isnan(downside_std):
+        return np.nan
+    return float(ann_excess_return / downside_std)
+
+
+def calmar_ratio(annual_return: float, mdd: float) -> float:
+    """Lợi suất năm hoá / |Max Drawdown|. Càng cao càng tốt (lợi nhuận cao so với rủi ro sụt giảm)."""
+    if mdd == 0 or np.isnan(mdd):
+        return np.nan
+    return float(annual_return / abs(mdd))
+
+
+def extended_risk_metrics(returns_df: pd.DataFrame, weights: np.ndarray, rf_annual: float) -> dict:
+    """Gói gọn Max Drawdown / Sortino / Calmar cho 1 danh mục đã có tỉ trọng cố định."""
+    equity = portfolio_equity_curve(returns_df, weights)
+    port_daily_return = pd.Series(returns_df.values @ weights, index=returns_df.index)
+    mdd_res = max_drawdown(equity)
+    annual_return = float(port_daily_return.mean() * TRADING_DAYS)
+    sortino = sortino_ratio(port_daily_return, rf_annual)
+    calmar = calmar_ratio(annual_return, mdd_res["max_drawdown"])
+    return {
+        "equity_curve": equity,
+        "drawdown_series": mdd_res["drawdown_series"],
+        "max_drawdown": mdd_res["max_drawdown"],
+        "sortino_ratio": sortino,
+        "calmar_ratio": calmar,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tối ưu hoá danh mục — Markowitz Mean-Variance (không bán khống, w >= 0)
+# ---------------------------------------------------------------------------
+def _portfolio_variance(w: np.ndarray, cov_annual: np.ndarray) -> float:
+    return float(w @ cov_annual @ w)
+
+
+def optimize_min_variance(returns_df: pd.DataFrame) -> dict:
+    """Tìm tỉ trọng có độ biến động (variance) thấp nhất."""
+    n = returns_df.shape[1]
+    cov_annual = returns_df.cov().values * TRADING_DAYS
+    mean_annual = returns_df.mean().values * TRADING_DAYS
+    w0 = np.repeat(1 / n, n)
+    bounds = [(0.0, 1.0)] * n
+    constraints = [{"type": "eq", "fun": lambda w: np.sum(w) - 1}]
+    res = minimize(_portfolio_variance, w0, args=(cov_annual,), method="SLSQP",
+                    bounds=bounds, constraints=constraints)
+    w = res.x
+    return {
+        "weights": dict(zip(returns_df.columns, w)),
+        "expected_return_annual": float(w @ mean_annual),
+        "volatility_annual": float(np.sqrt(w @ cov_annual @ w)),
+        "success": bool(res.success),
+    }
+
+
+def optimize_max_sharpe(returns_df: pd.DataFrame, rf_annual: float) -> dict:
+    """Tìm tỉ trọng có Sharpe Ratio cao nhất (danh mục tiếp tuyến)."""
+    n = returns_df.shape[1]
+    mean_annual = returns_df.mean().values * TRADING_DAYS
+    cov_annual = returns_df.cov().values * TRADING_DAYS
+
+    def neg_sharpe(w):
+        ret = w @ mean_annual
+        vol = np.sqrt(w @ cov_annual @ w)
+        return -(ret - rf_annual) / vol if vol > 0 else 1e6
+
+    w0 = np.repeat(1 / n, n)
+    bounds = [(0.0, 1.0)] * n
+    constraints = [{"type": "eq", "fun": lambda w: np.sum(w) - 1}]
+    res = minimize(neg_sharpe, w0, method="SLSQP", bounds=bounds, constraints=constraints)
+    w = res.x
+    ret = float(w @ mean_annual)
+    vol = float(np.sqrt(w @ cov_annual @ w))
+    return {
+        "weights": dict(zip(returns_df.columns, w)),
+        "expected_return_annual": ret,
+        "volatility_annual": vol,
+        "sharpe_ratio": float((ret - rf_annual) / vol) if vol > 0 else np.nan,
+        "success": bool(res.success),
+    }
+
+
+def efficient_frontier_curve(returns_df: pd.DataFrame, n_points: int = 25) -> pd.DataFrame:
+    """Vẽ đường biên hiệu quả: với mỗi mức lợi suất mục tiêu, tìm độ biến động nhỏ nhất có thể."""
+    n = returns_df.shape[1]
+    mean_annual = returns_df.mean().values * TRADING_DAYS
+    cov_annual = returns_df.cov().values * TRADING_DAYS
+    targets = np.linspace(mean_annual.min(), mean_annual.max(), n_points)
+
+    rows = []
+    for t in targets:
+        w0 = np.repeat(1 / n, n)
+        bounds = [(0.0, 1.0)] * n
+        constraints = [
+            {"type": "eq", "fun": lambda w: np.sum(w) - 1},
+            {"type": "eq", "fun": lambda w, t=t: w @ mean_annual - t},
+        ]
+        res = minimize(_portfolio_variance, w0, args=(cov_annual,), method="SLSQP",
+                        bounds=bounds, constraints=constraints)
+        if res.success:
+            vol = float(np.sqrt(res.x @ cov_annual @ res.x))
+            rows.append({"target_return": float(t), "volatility": vol})
+    return pd.DataFrame(rows)
+
+
+def random_portfolios(returns_df: pd.DataFrame, n: int = 3000, rf_annual: float = 0.0,
+                       seed: int | None = None) -> pd.DataFrame:
+    """Sinh ngẫu nhiên n danh mục (tỉ trọng Dirichlet, luôn >=0 và tổng = 1) để vẽ đám mây risk/return."""
+    rng = np.random.default_rng(seed)
+    n_assets = returns_df.shape[1]
+    mean_annual = returns_df.mean().values * TRADING_DAYS
+    cov_annual = returns_df.cov().values * TRADING_DAYS
+
+    w = rng.dirichlet(np.ones(n_assets), size=n)
+    rets = w @ mean_annual
+    vols = np.sqrt(np.einsum("ij,jk,ik->i", w, cov_annual, w))
+    sharpes = (rets - rf_annual) / vols
+    return pd.DataFrame({"return": rets, "volatility": vols, "sharpe": sharpes})

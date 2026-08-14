@@ -44,7 +44,7 @@ def show_table(df: pd.DataFrame, key: str, height: int = 350, editable_cols: lis
         )
         return pd.DataFrame(grid_res["data"])
     except Exception:
-        st.dataframe(df, use_container_width=True, height=height, key=f"{key}_fallback")
+        st.dataframe(df, width="stretch", height=height, key=f"{key}_fallback")
         return df
 
 
