@@ -246,6 +246,21 @@ def get_analyst_estimates(symbol: str) -> dict:
 # ---------------------------------------------------------------------------
 # Chỉ số tham chiếu (benchmark) dùng cho CAPM
 # ---------------------------------------------------------------------------
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_country_info(asset_class: str, symbol: str) -> str:
+    """Quốc gia trụ sở/thị trường chính — dùng cho bản đồ phân bổ danh mục.
+    Cố gắng lấy tốt nhất có thể; trả về None nếu không xác định được."""
+    if asset_class == ASSET_VN:
+        return "Vietnam"
+    if asset_class == ASSET_CRYPTO:
+        return None  # crypto không gắn với 1 quốc gia cụ thể
+    try:
+        raw = yf.Ticker(symbol).info or {}
+        return raw.get("country")
+    except Exception:
+        return None
+
+
 @st.cache_data(ttl=900, show_spinner=False)
 def get_benchmark_history(asset_class: str, start, end) -> pd.DataFrame:
     """S&P500 (^GSPC) cho World/Crypto; VNINDEX cho VN Stock."""

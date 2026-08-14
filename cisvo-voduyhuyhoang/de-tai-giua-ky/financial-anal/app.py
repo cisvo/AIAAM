@@ -5,10 +5,20 @@ FinDash-VN — Dashboard thông tin đầu tư có hỗ trợ Chatbot.
 
 Chạy: streamlit run app.py
 
-Ba chế độ (sidebar):
-    1) Một tài sản      -> Summary / Chart / Thống kê & Tài chính / Phân tích
-    2) Danh mục đầu tư  -> CAPM / APT / Thống kê danh mục / Monte Carlo Simulation
-    3) Chatbot          -> hỏi đáp với Claude, có ngữ cảnh từ dashboard
+Tính năng chính:
+    - Multipage app thật (st.navigation/st.Page): Một tài sản / Danh mục đầu tư / Chatbot
+    - Cổng đăng nhập tuỳ chọn (auth.py: none / password / Google OIDC)
+    - Theme tối + logo riêng (.streamlit/config.toml, assets/logo.png)
+    - st.fragment cho các phần nặng (chart, CAPM/APT, Monte Carlo) -> đổi input
+      không phải rerun toàn trang
+    - Auto-refresh giá theo chu kỳ (st.fragment run_every, có thể bật/tắt)
+    - st.dialog: xem nhanh 1 mã khác không cần rời trang
+    - st.status: hiển thị tiến trình khi tải & phân tích dữ liệu danh mục
+    - st.data_editor: chỉnh tỉ trọng danh mục ngay trong bảng
+    - st.file_uploader: nạp danh mục có sẵn từ file CSV
+    - Xuất báo cáo CSV / Excel / PDF
+    - Bảng dữ liệu nâng cao qua streamlit-aggrid (tự fallback nếu chưa cài)
+    - Bản đồ phân bổ danh mục theo quốc gia (best-effort)
 """
 from datetime import datetime, timedelta
 
@@ -19,18 +29,19 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+import auth
 import chatbot
 import data_sources as ds
 import portfolio_analytics as pa
+import ui_helpers as uih
 
-st.set_page_config(page_title="FinDash-VN", layout="wide")
+st.set_page_config(page_title="FinDash-VN", layout="wide", page_icon="📊")
 
 
 # =============================================================================
 # Helpers dùng chung
 # =============================================================================
 def pick_symbol(asset_class: str, key_prefix: str):
-    """Widget chọn mã theo loại tài sản. Trả về mã đã chọn (string)."""
     if asset_class == ds.ASSET_WORLD:
         options = ds.get_world_stock_list()
         default_idx = options.index("AAPL") if "AAPL" in options else 0
@@ -47,8 +58,7 @@ def pick_symbol(asset_class: str, key_prefix: str):
 
 
 def multi_pick_symbols(key_prefix: str):
-    """Widget chọn nhiều mã thuộc nhiều loại tài sản khác nhau cho danh mục.
-    Trả về list[(asset_class, symbol)]."""
+    """Widget chọn nhiều mã thuộc nhiều loại tài sản. Trả về list[(asset_class, symbol)]."""
     picked = []
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -81,18 +91,50 @@ def fmt(v):
     return str(v)
 
 
+ASSET_CODE_ALIASES = {
+    "world": ds.ASSET_WORLD, "the gioi": ds.ASSET_WORLD, "thegioi": ds.ASSET_WORLD,
+    "vn": ds.ASSET_VN, "viet nam": ds.ASSET_VN, "vietnam": ds.ASSET_VN,
+    "crypto": ds.ASSET_CRYPTO, "tien dien tu": ds.ASSET_CRYPTO,
+}
+
+
+@st.dialog("🔍 Xem nhanh một mã khác")
+def quick_lookup_dialog():
+    ac = st.selectbox("Loại tài sản", ds.ASSET_CLASSES, key="dlg_ac")
+    sym = pick_symbol(ac, "dlg")
+    if st.button("Tra cứu", key="dlg_go"):
+        info = ds.get_summary_info(ac, sym)
+        if not info:
+            st.warning("Không có dữ liệu.")
+        else:
+            st.table(pd.DataFrame(list(info.items())[:10], columns=["Chỉ tiêu", "Giá trị"]).set_index("Chỉ tiêu"))
+        start, end = ds.period_to_dates("3 Tháng")
+        hist = ds.get_price_history(ac, sym, start, end)
+        if not hist.empty:
+            st.plotly_chart(px.line(hist, x="Date", y="Close", title=f"{sym} — 3 tháng gần nhất"),
+                             use_container_width=True)
+
+
 # =============================================================================
-# CHẾ ĐỘ 1 — MỘT TÀI SẢN
+# TRANG 1 — MỘT TÀI SẢN
 # =============================================================================
-def render_single_asset_mode():
+def page_single_asset():
+    st.title("📈 Một tài sản")
     st.sidebar.subheader("Chọn tài sản")
     asset_class = st.sidebar.selectbox("Loại tài sản", ds.ASSET_CLASSES, key="single_asset_class")
     symbol = pick_symbol(asset_class, "single")
 
+    c1, c2 = st.sidebar.columns(2)
+    with c1:
+        if st.button("🔍 Xem mã khác", use_container_width=True):
+            quick_lookup_dialog()
+    with c2:
+        live = st.toggle("🔴 Live", value=False, help="Tự động làm mới giá mỗi 30 giây")
+
     tab1, tab2, tab3, tab4 = st.tabs(["📋 Summary", "📈 Chart", "📊 Thống kê & Tài chính", "🔍 Phân tích"])
 
     with tab1:
-        render_summary_tab(asset_class, symbol)
+        render_summary_tab(asset_class, symbol, live)
     with tab2:
         render_chart_tab(asset_class, symbol)
     with tab3:
@@ -101,9 +143,25 @@ def render_single_asset_mode():
         render_analysis_tab(asset_class, symbol)
 
 
-def render_summary_tab(asset_class, symbol):
-    st.subheader(f"Summary — {symbol}")
+@st.fragment(run_every="30s")
+def _live_price_ticker(asset_class, symbol):
     info = ds.get_summary_info(asset_class, symbol)
+    price = info.get("Previous Close") or info.get("Giá đóng cửa gần nhất")
+    st.metric(f"Giá {symbol} (tự động làm mới 30s)", fmt(price) if price is not None else "—",
+               help=f"Cập nhật lúc {datetime.now():%H:%M:%S}")
+
+
+@st.fragment
+def render_summary_tab(asset_class, symbol, live: bool):
+    st.subheader(f"Summary — {symbol}")
+
+    if live:
+        _live_price_ticker(asset_class, symbol)
+
+    with st.status("Đang tải dữ liệu Summary...", expanded=False) as status:
+        info = ds.get_summary_info(asset_class, symbol)
+        status.update(label="Đã tải xong", state="complete")
+
     if not info:
         st.info("Không có dữ liệu tóm tắt.")
     else:
@@ -114,6 +172,10 @@ def render_summary_tab(asset_class, symbol):
             st.table(pd.DataFrame(items[:half], columns=["Chỉ tiêu", "Giá trị"]).set_index("Chỉ tiêu"))
         with c2:
             st.table(pd.DataFrame(items[half:], columns=["Chỉ tiêu", "Giá trị"]).set_index("Chỉ tiêu"))
+        uih.export_csv_button(
+            pd.DataFrame(items, columns=["Chỉ tiêu", "Giá trị"]).set_index("Chỉ tiêu"),
+            f"{symbol}_summary.csv", "⬇️ Tải Summary (CSV)", key=f"dl_summary_{symbol}",
+        )
 
     start, end = ds.period_to_dates("1 Năm")
     hist = ds.get_price_history(asset_class, symbol, start, end)
@@ -134,6 +196,7 @@ def render_summary_tab(asset_class, symbol):
         st.warning("Không lấy được dữ liệu giá lịch sử.")
 
 
+@st.fragment
 def render_chart_tab(asset_class, symbol):
     st.subheader(f"Chart — {symbol}")
     c1, c2, c3, c4 = st.columns(4)
@@ -147,7 +210,10 @@ def render_chart_tab(asset_class, symbol):
         plot_type = st.selectbox("Loại biểu đồ", ["Line", "Candlestick"], key="chart_type")
 
     freq_map = {"Ngày": "D", "Tuần": "W", "Tháng": "ME"}
-    raw = ds.get_price_history(asset_class, symbol, start_date, end_date)
+    with st.status("Đang tải dữ liệu giá...", expanded=False) as status:
+        raw = ds.get_price_history(asset_class, symbol, start_date, end_date)
+        status.update(label="Đã tải xong", state="complete")
+
     if raw.empty:
         st.warning("Không lấy được dữ liệu giá cho khoảng thời gian đã chọn.")
         return
@@ -172,7 +238,11 @@ def render_chart_tab(asset_class, symbol):
     fig.update_layout(title=f"{symbol} — Biến động giá & khối lượng ({sampling.lower()})", height=550)
     st.plotly_chart(fig, use_container_width=True)
 
+    uih.export_csv_button(chart_df.set_index("Date"), f"{symbol}_chart_data.csv",
+                           "⬇️ Tải dữ liệu biểu đồ (CSV)", key=f"dl_chart_{symbol}")
 
+
+@st.fragment
 def render_stats_financials_tab(asset_class, symbol):
     st.subheader(f"Thống kê & Tài chính — {symbol}")
 
@@ -204,11 +274,18 @@ def render_stats_financials_tab(asset_class, symbol):
                       "Lưu chuyển tiền tệ": "cashflow"}[statement_label]
     period_key = {"Năm": "year", "Quý": "quarter"}[period_label]
 
-    data = ds.get_financials(asset_class, symbol, statement_key, period_key)
+    with st.status("Đang tải báo cáo tài chính...", expanded=False) as status:
+        data = ds.get_financials(asset_class, symbol, statement_key, period_key)
+        status.update(label="Đã tải xong", state="complete")
+
     if data is None or data.empty:
         st.warning("Không có dữ liệu báo cáo tài chính cho lựa chọn này.")
     else:
-        st.dataframe(data, use_container_width=True)
+        uih.show_table(data, key=f"fin_table_{symbol}_{statement_key}_{period_key}", height=400)
+        uih.export_excel_button(
+            {f"{statement_label}": data}, f"{symbol}_{statement_key}_{period_key}.xlsx",
+            "⬇️ Tải báo cáo (Excel)", key=f"dl_fin_xlsx_{symbol}_{statement_key}",
+        )
 
 
 def render_analysis_tab(asset_class, symbol):
@@ -225,13 +302,14 @@ def render_analysis_tab(asset_class, symbol):
         return
     for name, df in analysis.items():
         st.markdown(f"**{name}**")
-        st.dataframe(df, use_container_width=True)
+        uih.show_table(df, key=f"analysis_{symbol}_{name}", height=220)
 
 
 # =============================================================================
-# CHẾ ĐỘ 2 — DANH MỤC ĐẦU TƯ
+# TRANG 2 — DANH MỤC ĐẦU TƯ
 # =============================================================================
-def render_portfolio_mode():
+def page_portfolio():
+    st.title("💼 Danh mục đầu tư")
     st.sidebar.subheader("Cấu hình danh mục")
     benchmark_class = st.sidebar.radio(
         "Benchmark CAPM/APT dùng chỉ số nào?",
@@ -243,6 +321,37 @@ def render_portfolio_mode():
     period_label = st.sidebar.selectbox("Khoảng dữ liệu lịch sử", list(ds.PERIOD_DAYS.keys()), index=3)
     start, end = ds.period_to_dates(period_label)
 
+    with st.expander("📤 Nạp danh mục có sẵn từ file CSV (tuỳ chọn)"):
+        st.caption("Cột cần có: `asset_class` (world/vn/crypto), `symbol`, `weight` (%).")
+        up = st.file_uploader("Chọn file CSV", type=["csv"], key="portfolio_csv")
+        if up is not None:
+            try:
+                up_df = pd.read_csv(up)
+                up_df.columns = [c.strip().lower() for c in up_df.columns]
+                world, vn, crypto, weights = [], [], [], {}
+                for _, row in up_df.iterrows():
+                    ac_raw = str(row["asset_class"]).strip().lower()
+                    ac = ASSET_CODE_ALIASES.get(ac_raw, ac_raw)
+                    sym = str(row["symbol"]).strip().upper()
+                    w = float(row.get("weight", 0) or 0)
+                    if ac == ds.ASSET_WORLD:
+                        world.append(sym)
+                    elif ac == ds.ASSET_VN:
+                        vn.append(sym)
+                    elif ac == ds.ASSET_CRYPTO:
+                        crypto.append(sym)
+                    else:
+                        continue
+                    weights[f"{ac}:{sym}"] = w
+                st.session_state["port_world_multi"] = world
+                st.session_state["port_vn_multi"] = vn
+                st.session_state["port_crypto_multi"] = crypto
+                st.session_state["uploaded_weights"] = weights
+                st.success(f"Đã nạp {len(world) + len(vn) + len(crypto)} mã từ file. Đang làm mới trang...")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Không đọc được file: {e}")
+
     st.subheader("Chọn danh mục")
     picked = multi_pick_symbols("port")
 
@@ -250,45 +359,58 @@ def render_portfolio_mode():
         st.info("Chọn ít nhất 2 tài sản để phân tích danh mục.")
         return
 
-    st.markdown("#### Tỉ trọng danh mục")
-    weights = {}
-    cols = st.columns(min(len(picked), 5))
+    st.markdown("#### Tỉ trọng danh mục (có thể sửa trực tiếp trong bảng)")
+    uploaded_w = st.session_state.get("uploaded_weights", {})
     equal_w = round(100 / len(picked), 2)
-    for i, (ac, sym) in enumerate(picked):
-        with cols[i % len(cols)]:
-            weights[f"{ac}:{sym}"] = st.number_input(
-                f"{sym} (%)", 0.0, 100.0, equal_w, 0.5, key=f"w_{ac}_{sym}",
-            )
-    total_w = sum(weights.values())
+    weight_rows = [{
+        "Loại tài sản": ac, "Mã": sym,
+        "Tỉ trọng (%)": uploaded_w.get(f"{ac}:{sym}", equal_w),
+    } for ac, sym in picked]
+    weight_df = pd.DataFrame(weight_rows)
+
+    try:
+        edited = st.data_editor(
+            weight_df, key="weight_editor", use_container_width=True, hide_index=True,
+            disabled=["Loại tài sản", "Mã"],
+            column_config={"Tỉ trọng (%)": st.column_config.NumberColumn(min_value=0.0, max_value=100.0, step=0.5)},
+        )
+    except Exception:
+        edited = weight_df  # fallback nếu phiên bản Streamlit quá cũ không có data_editor
+
+    total_w = edited["Tỉ trọng (%)"].sum()
     if total_w == 0:
         st.error("Tổng tỉ trọng phải > 0.")
         return
-    norm_weights = np.array([w / total_w for w in weights.values()])
-    st.caption(f"Tổng tỉ trọng nhập: {total_w:.1f}% → đã chuẩn hoá về 100%.")
+    st.caption(f"Tổng tỉ trọng nhập: {total_w:.1f}% → sẽ tự chuẩn hoá về 100% khi tính toán.")
+    weights = {f"{r['Loại tài sản']}:{r['Mã']}": r["Tỉ trọng (%)"] for _, r in edited.iterrows()}
 
-    # Lấy dữ liệu giá & lợi suất cho từng tài sản
-    returns_dict = {}
-    for ac, sym in picked:
-        hist = ds.get_price_history(ac, sym, start, end)
-        if hist.empty or len(hist) < 30:
-            st.warning(f"Bỏ qua {sym}: không đủ dữ liệu giá trong khoảng thời gian đã chọn.")
-            continue
-        returns_dict[f"{ac}:{sym}"] = pa.prices_to_returns(hist)
+    with st.status("Đang tải giá & tính toán danh mục...", expanded=True) as status:
+        returns_dict = {}
+        for ac, sym in picked:
+            st.write(f"Đang tải {sym} ({ac})...")
+            hist = ds.get_price_history(ac, sym, start, end)
+            if hist.empty or len(hist) < 30:
+                st.write(f"⚠️ Bỏ qua {sym}: không đủ dữ liệu.")
+                continue
+            returns_dict[f"{ac}:{sym}"] = pa.prices_to_returns(hist)
 
-    if len(returns_dict) < 2:
-        st.error("Không đủ dữ liệu để phân tích danh mục. Hãy chọn khoảng thời gian dài hơn.")
-        return
+        if len(returns_dict) < 2:
+            status.update(label="Không đủ dữ liệu", state="error")
+            st.error("Không đủ dữ liệu để phân tích danh mục. Hãy chọn khoảng thời gian dài hơn.")
+            return
 
-    returns_df = pa.align_returns(returns_dict)
-    valid_keys = list(returns_df.columns)
-    norm_weights = np.array([weights[k] for k in valid_keys])
-    norm_weights = norm_weights / norm_weights.sum()
+        returns_df = pa.align_returns(returns_dict)
+        valid_keys = list(returns_df.columns)
+        norm_weights = np.array([weights[k] for k in valid_keys])
+        norm_weights = norm_weights / norm_weights.sum()
 
-    bench_hist = ds.get_benchmark_history(benchmark_class, start, end)
-    bench_returns = pa.prices_to_returns(bench_hist) if not bench_hist.empty else pd.Series(dtype=float)
+        st.write("Đang tải chỉ số benchmark...")
+        bench_hist = ds.get_benchmark_history(benchmark_class, start, end)
+        bench_returns = pa.prices_to_returns(bench_hist) if not bench_hist.empty else pd.Series(dtype=float)
+        status.update(label="Hoàn tất", state="complete")
 
-    tab_capm, tab_apt, tab_stats, tab_mc = st.tabs(
-        ["📐 CAPM", "🧮 APT", "📊 Thống kê danh mục", "🎲 Monte Carlo Simulation"]
+    tab_capm, tab_apt, tab_stats, tab_mc, tab_map = st.tabs(
+        ["📐 CAPM", "🧮 APT", "📊 Thống kê danh mục", "🎲 Monte Carlo Simulation", "🗺️ Phân bổ địa lý"]
     )
 
     with tab_capm:
@@ -301,8 +423,15 @@ def render_portfolio_mode():
         st.session_state["last_portfolio_tickers"] = valid_keys
     with tab_mc:
         render_monte_carlo_tab(returns_df, norm_weights, valid_keys)
+    with tab_map:
+        render_geo_tab(picked)
+
+    st.divider()
+    render_portfolio_export(returns_df, bench_returns, rf_annual, benchmark_class,
+                             norm_weights, valid_keys)
 
 
+@st.fragment
 def render_capm_tab(returns_df, bench_returns, rf_annual, benchmark_class):
     st.markdown(f"Mô hình CAPM — benchmark: **{benchmark_class}**, Rf = {rf_annual:.2%}/năm")
     if bench_returns.empty:
@@ -322,6 +451,7 @@ def render_capm_tab(returns_df, bench_returns, rf_annual, benchmark_class):
                               "E[R] CAPM (năm)": "{:.2%}"}),
         use_container_width=True,
     )
+    st.session_state["last_capm_df"] = res_df
 
     fig = px.bar(res_df.reset_index(), x="Tài sản", y="Beta", title="Beta của từng tài sản so với benchmark")
     fig.add_hline(y=1, line_dash="dash", annotation_text="Beta thị trường = 1")
@@ -333,6 +463,7 @@ def render_capm_tab(returns_df, bench_returns, rf_annual, benchmark_class):
     )
 
 
+@st.fragment
 def render_apt_tab(returns_df, benchmark_class, start, end, rf_annual):
     st.markdown("Mô hình APT (đa nhân tố) — hồi quy lợi suất từng tài sản theo nhiều nhân tố rủi ro.")
 
@@ -353,10 +484,8 @@ def render_apt_tab(returns_df, benchmark_class, start, end, rf_annual):
     factor_series = {}
     for name in chosen:
         tk = factor_tickers[name]
-        if tk is None:  # thị trường VN -> lấy VNINDEX qua benchmark helper
-            bh = ds.get_benchmark_history(ds.ASSET_VN, start, end)
-        else:
-            bh = ds.get_price_history(ds.ASSET_WORLD, tk, start, end)
+        bh = ds.get_benchmark_history(ds.ASSET_VN, start, end) if tk is None else \
+            ds.get_price_history(ds.ASSET_WORLD, tk, start, end)
         if not bh.empty:
             factor_series[name] = pa.prices_to_returns(bh)
 
@@ -374,7 +503,8 @@ def render_apt_tab(returns_df, benchmark_class, start, end, rf_annual):
         betas_table[col] = res["betas"]
 
     st.markdown("**Beta theo từng nhân tố**")
-    st.dataframe(pd.DataFrame(betas_table).T.style.format("{:.3f}"), use_container_width=True)
+    betas_df = pd.DataFrame(betas_table).T
+    st.dataframe(betas_df.style.format("{:.3f}"), use_container_width=True)
 
     st.markdown("**Kết quả hồi quy APT**")
     res_df = pd.DataFrame(rows).set_index("Tài sản")
@@ -382,6 +512,8 @@ def render_apt_tab(returns_df, benchmark_class, start, end, rf_annual):
         res_df.style.format({"Alpha (năm)": "{:.2%}", "R²": "{:.2f}", "E[R] APT (năm)": "{:.2%}"}),
         use_container_width=True,
     )
+    st.session_state["last_apt_df"] = res_df
+    st.session_state["last_apt_betas_df"] = betas_df
     st.caption(
         "APT giả định lợi suất tài sản chịu ảnh hưởng bởi nhiều nhân tố rủi ro hệ thống "
         "(thay vì chỉ thị trường như CAPM). Đây là bản đơn giản hoá phục vụ mục đích học tập."
@@ -407,6 +539,7 @@ def render_portfolio_stats_tab(returns_df, weights, rf_annual, keys):
     return stats
 
 
+@st.fragment
 def render_monte_carlo_tab(returns_df, weights, keys):
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -444,16 +577,80 @@ def render_monte_carlo_tab(returns_df, weights, keys):
         "VaR: khoản lỗ tối đa kỳ vọng ở mức tin cậy đã chọn. "
         "CVaR (Expected Shortfall): mức lỗ trung bình trong các kịch bản tệ hơn VaR."
     )
+    st.session_state["last_mc_summary"] = pd.DataFrame([{
+        "Số lượt mô phỏng": n_sims, "Số ngày": horizon, "Độ tin cậy": confidence,
+        "VaR": var_res["VaR"], "CVaR": var_res["CVaR"],
+    }])
+
+
+def render_geo_tab(picked):
+    st.caption("Phân bổ danh mục theo quốc gia/thị trường (best-effort — một số mã có thể thiếu thông tin).")
+    rows = []
+    for ac, sym in picked:
+        country = ds.get_country_info(ac, sym)
+        rows.append({"Mã": sym, "Loại tài sản": ac, "Quốc gia": country or "Không xác định"})
+    geo_df = pd.DataFrame(rows)
+    counts = geo_df.groupby("Quốc gia").size().reset_index(name="Số mã")
+
+    try:
+        fig = px.scatter_geo(
+            counts[counts["Quốc gia"] != "Không xác định"],
+            locations="Quốc gia", locationmode="country names", size="Số mã",
+            projection="natural earth", title="Phân bổ danh mục theo quốc gia",
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception:
+        st.info("Không vẽ được bản đồ — hiển thị dạng bảng bên dưới.")
+    st.dataframe(counts, use_container_width=True)
+
+
+def render_portfolio_export(returns_df, bench_returns, rf_annual, benchmark_class, weights, keys):
+    st.markdown("#### 📤 Xuất báo cáo danh mục")
+    stats = pa.portfolio_stats(returns_df, weights, rf_annual)
+    capm_df = st.session_state.get("last_capm_df", pd.DataFrame())
+    apt_df = st.session_state.get("last_apt_df", pd.DataFrame())
+    mc_df = st.session_state.get("last_mc_summary", pd.DataFrame())
+
+    summary_df = pd.DataFrame([{
+        "Danh mục": ", ".join(keys),
+        "Lợi suất kỳ vọng (năm)": stats["expected_return_annual"],
+        "Độ biến động (năm)": stats["volatility_annual"],
+        "Sharpe Ratio": stats["sharpe_ratio"],
+        "Benchmark": benchmark_class,
+        "Rf (%/năm)": rf_annual * 100,
+    }])
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        uih.export_csv_button(summary_df.set_index("Danh mục"), "portfolio_summary.csv",
+                               "⬇️ CSV", key="dl_port_csv")
+    with c2:
+        uih.export_excel_button(
+            {"Tổng quan": summary_df, "CAPM": capm_df, "APT": apt_df, "Monte Carlo": mc_df,
+             "Tương quan": stats["corr_matrix"]},
+            "portfolio_report.xlsx", "⬇️ Excel", key="dl_port_xlsx",
+        )
+    with c3:
+        sections = [
+            ("Tổng quan danh mục", summary_df),
+            ("CAPM", capm_df),
+            ("APT", apt_df),
+            ("Monte Carlo Simulation", mc_df),
+        ]
+        uih.export_pdf_button("FinDash-VN — Báo cáo Danh mục Đầu tư", sections,
+                               "portfolio_report.pdf", "⬇️ PDF", key="dl_port_pdf")
 
 
 # =============================================================================
-# CHẾ ĐỘ 3 — CHATBOT
+# TRANG 3 — CHATBOT
 # =============================================================================
-def render_chatbot_mode():
-    st.subheader("💬 Chatbot hỗ trợ đầu tư")
-    st.caption("Chatbot dùng Anthropic Claude API. Nhập API key của bạn để bắt đầu (chỉ lưu trong phiên làm việc).")
+def page_chatbot():
+    st.title("💬 Chatbot hỗ trợ đầu tư")
+    st.caption("Dùng Anthropic Claude API. Nhập API key ở sidebar (chỉ lưu trong phiên làm việc).")
 
-    api_key = st.sidebar.text_input("Anthropic API Key", type="password", key="anthropic_api_key")
+    default_key = st.secrets.get("anthropic", {}).get("api_key", "") if hasattr(st, "secrets") else ""
+    api_key = st.sidebar.text_input("Anthropic API Key", type="password",
+                                     value=default_key, key="anthropic_api_key")
     model = st.sidebar.text_input("Model", value=chatbot.DEFAULT_MODEL, key="anthropic_model")
 
     if "chat_history" not in st.session_state:
@@ -492,23 +689,23 @@ def render_chatbot_mode():
 
 
 # =============================================================================
-# MAIN
+# MAIN — theme/logo, auth gate, multipage navigation
 # =============================================================================
 def main():
-    st.sidebar.title("📊 FinDash-VN")
-    mode = st.sidebar.radio(
-        "Chế độ", ["Một tài sản", "Danh mục đầu tư", "Chatbot"], key="app_mode",
-    )
-    st.sidebar.divider()
+    try:
+        st.logo("assets/logo.png", icon_image="assets/icon.png")
+    except Exception:
+        pass
 
-    st.title("FinDash-VN — Dashboard Thông Tin Đầu Tư")
+    if not auth.require_login():
+        return  # auth.require_login() đã tự vẽ màn hình đăng nhập + st.stop()
 
-    if mode == "Một tài sản":
-        render_single_asset_mode()
-    elif mode == "Danh mục đầu tư":
-        render_portfolio_mode()
-    else:
-        render_chatbot_mode()
+    single = st.Page(page_single_asset, title="Một tài sản", icon="📈", url_path="single-asset", default=True)
+    portfolio = st.Page(page_portfolio, title="Danh mục đầu tư", icon="💼", url_path="portfolio")
+    bot = st.Page(page_chatbot, title="Chatbot", icon="💬", url_path="chatbot")
+
+    nav = st.navigation([single, portfolio, bot])
+    nav.run()
 
 
 if __name__ == "__main__":
