@@ -1,0 +1,12 @@
+streamlit
+yfinance
+vnstock
+pandas
+numpy
+plotly
+matplotlib
+statsmodels
+anthropic
+requests
+beautifulsoup4
+lxml
