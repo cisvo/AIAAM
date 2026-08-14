@@ -1,0 +1,14 @@
+TRƯỜNG ĐẠI HỌC KINH TẾ TP. HỒ CHÍ MINH
+Sinh Viên: Võ Duy Huy Hoàng   |  MSSV: 87243020093
+
+BÀI THỰC HÀNH LAB01
+PHÂN TÍCH KHÁM PHÁ DỮ LIỆU
+(Exploratory Data Analysis - EDA)
+
+
+Dataset sử dụng:
+• COVID-19 (Our World in Data)  •  Red Wine Quality (UCI)
+• Pima Indians Diabetes (UCI)  •  Customer Personality Analysis (Kaggle)
+
+Colab link:
+https://colab.research.google.com/drive/1yDj7H4ofi6G-shaRPLD1x_wecytFQtKC?usp=sharing
