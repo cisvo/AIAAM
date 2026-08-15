@@ -44,6 +44,48 @@ thực chất (tối ưu hoá danh mục, chỉ báo kỹ thuật, định giá,
 | **st.login() / cổng mật khẩu** | `auth.py` | 3 chế độ: `none` (mặc định) / `password` / `oidc` (Google) |
 | **Bản đồ phân bổ danh mục** | Tab "🗺️ Phân bổ địa lý" | Best-effort theo trường `country` của yfinance |
 
+## Đã sửa sau phản hồi "UI nhìn như bản nháp"
+
+Streamlit theming mặc định chỉ đổi màu, không đổi hình khối/khoảng cách — nên bản đầu
+nhìn phẳng, rời rạc. Đã sửa bằng **cấu hình chính thức của Streamlit** (không phải CSS
+hack):
+
+- `.streamlit/config.toml`: thêm `baseRadius="large"` (bo góc mọi input/button/card/
+  dataframe), `borderColor` + `showWidgetBorder=true` (viền nhẹ quanh widget kể cả khi
+  không focus — hết cảm giác "mọi thứ trôi nổi"), `showSidebarBorder=true`, và màu nền
+  sidebar riêng (`[theme.sidebar]`) để tách biệt trực quan với nội dung chính.
+- Gom các nhóm điều khiển liên quan vào `st.container(border=True)` (card thật, API gốc
+  của Streamlit) thay vì để từng widget trôi nổi rời rạc — VD: khối điều khiển Chart,
+  khối chọn danh mục, bảng tỉ trọng, khối Graham/DCF...
+- Bỏ các hộp `st.status` full-width cho những lần tải dữ liệu nhanh/đơn lẻ (Summary,
+  Chart, Stats, Backtest) — đổi sang `st.spinner` (tự biến mất, không chiếm chỗ khi xong).
+  Chỉ giữ `st.status` ở Danh mục đầu tư vì đó là nơi thực sự có nhiều bước tải tuần tự.
+- Sửa placeholder tiếng Anh sót lại ("Choose options") bằng `placeholder="Chọn..."` trên
+  các multiselect.
+- Giảm bớt tiêu đề lặp lại/quá to (`st.title` → `st.subheader`/`st.markdown` ở cấp trang
+  và tab) cho đỡ nặng nề.
+
+## Liên kết giữa 3 trang (sửa sau phản hồi "3 trang tách rời nhau")
+
+Trước đó Chatbot có 1 lỗi thật: luôn đọc `symbol=None` nên chưa từng biết bạn đang xem
+mã nào ở "Một tài sản". Đã sửa + thêm điều hướng 2 chiều thật sự:
+
+- **Một tài sản → Chatbot**: nút "💬 Hỏi Chatbot về {mã}" — chuyển thẳng sang Chatbot,
+  ngữ cảnh tự động gồm đúng mã + số liệu Summary mới nhất của mã đó.
+- **Một tài sản → Danh mục đầu tư**: nút "➕ Thêm {mã} vào danh mục đầu tư" — thêm mã
+  đang xem vào danh sách chọn ở trang Danh mục rồi chuyển sang đó luôn.
+- **Danh mục đầu tư → Một tài sản**: chọn 1 mã trong danh mục + nút "Xem chi tiết" —
+  nhảy sang "Một tài sản" với đúng mã đó đã được chọn sẵn.
+- **Danh mục đầu tư → Chatbot**: nút "💬 Hỏi Chatbot về danh mục này" sau khi phân tích
+  xong — ngữ cảnh tự gồm tỉ trọng, lợi suất kỳ vọng, Sharpe... của danh mục vừa tính.
+- **Chatbot**: hiện rõ đang dùng ngữ cảnh nào (mã nào / danh mục nào), có checkbox tắt
+  bớt nếu không muốn gửi, và cảnh báo rõ khi chưa có ngữ cảnh nào để dùng.
+
+Kỹ thuật: dùng `st.switch_page()` (API chính thức của Streamlit cho multipage app) với
+3 đối tượng `st.Page` khai báo ở cấp module (`PAGE_SINGLE`, `PAGE_PORTFOLIO`,
+`PAGE_CHATBOT`) — không phải tự chế điều hướng bằng session_state. Đã test bằng
+`AppTest` mô phỏng click thật cả 2 chiều điều hướng, xác nhận không lỗi và không cảnh báo.
+
 ## Cấu trúc project
 
 ```

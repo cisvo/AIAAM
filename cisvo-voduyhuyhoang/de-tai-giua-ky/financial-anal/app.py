@@ -47,42 +47,50 @@ st.set_page_config(page_title="FinDash-VN", layout="wide", page_icon="📊")
 def pick_symbol(asset_class: str, key_prefix: str):
     if asset_class == ds.ASSET_WORLD:
         options = ds.get_world_stock_list()
-        default_idx = options.index("AAPL") if "AAPL" in options else 0
-        return st.selectbox("Chọn mã cổ phiếu", options, index=default_idx, key=f"{key_prefix}_world")
+        key = f"{key_prefix}_world"
+        st.session_state.setdefault(key, "AAPL" if "AAPL" in options else options[0])
+        return st.selectbox("Chọn mã cổ phiếu", options, key=key)
     elif asset_class == ds.ASSET_VN:
         options = ds.get_vn_stock_list()
-        default_idx = options.index("VNM") if "VNM" in options else 0
-        return st.selectbox("Chọn mã cổ phiếu", options, index=default_idx, key=f"{key_prefix}_vn")
+        key = f"{key_prefix}_vn"
+        st.session_state.setdefault(key, "VNM" if "VNM" in options else options[0])
+        return st.selectbox("Chọn mã cổ phiếu", options, key=key)
     else:
         crypto_map = ds.get_crypto_list()
         labels = [f"{sym} — {name}" for sym, name in crypto_map.items()]
-        choice = st.selectbox("Chọn tiền điện tử", labels, key=f"{key_prefix}_crypto")
+        key = f"{key_prefix}_crypto"
+        st.session_state.setdefault(key, labels[0] if labels else None)
+        choice = st.selectbox("Chọn tiền điện tử", labels, key=key)
         return choice.split(" — ")[0]
 
 
 def multi_pick_symbols(key_prefix: str):
     """Widget chọn nhiều mã thuộc nhiều loại tài sản. Trả về list[(asset_class, symbol)]."""
     picked = []
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        world_syms = st.multiselect(
-            "Cổ phiếu Thế giới", ds.get_world_stock_list(),
-            default=["AAPL", "MSFT"], key=f"{key_prefix}_world_multi",
-        )
-        picked += [(ds.ASSET_WORLD, s) for s in world_syms]
-    with c2:
-        vn_syms = st.multiselect(
-            "Cổ phiếu Việt Nam", ds.get_vn_stock_list(),
-            default=["VNM"], key=f"{key_prefix}_vn_multi",
-        )
-        picked += [(ds.ASSET_VN, s) for s in vn_syms]
-    with c3:
-        crypto_map = ds.get_crypto_list()
-        crypto_syms = st.multiselect(
-            "Tiền điện tử", list(crypto_map.keys()),
-            default=["BTC-USD"], key=f"{key_prefix}_crypto_multi",
-        )
-        picked += [(ds.ASSET_CRYPTO, s) for s in crypto_syms]
+    with st.container(border=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.session_state.setdefault(f"{key_prefix}_world_multi", ["AAPL", "MSFT"])
+            world_syms = st.multiselect(
+                "Cổ phiếu Thế giới", ds.get_world_stock_list(),
+                placeholder="Chọn mã...", key=f"{key_prefix}_world_multi",
+            )
+            picked += [(ds.ASSET_WORLD, s) for s in world_syms]
+        with c2:
+            st.session_state.setdefault(f"{key_prefix}_vn_multi", ["VNM"])
+            vn_syms = st.multiselect(
+                "Cổ phiếu Việt Nam", ds.get_vn_stock_list(),
+                placeholder="Chọn mã...", key=f"{key_prefix}_vn_multi",
+            )
+            picked += [(ds.ASSET_VN, s) for s in vn_syms]
+        with c3:
+            crypto_map = ds.get_crypto_list()
+            st.session_state.setdefault(f"{key_prefix}_crypto_multi", ["BTC-USD"])
+            crypto_syms = st.multiselect(
+                "Tiền điện tử", list(crypto_map.keys()),
+                placeholder="Chọn mã...", key=f"{key_prefix}_crypto_multi",
+            )
+            picked += [(ds.ASSET_CRYPTO, s) for s in crypto_syms]
     return picked
 
 
@@ -118,21 +126,48 @@ def quick_lookup_dialog():
                              width="stretch")
 
 
+def _jump_to_single_asset(asset_class: str, symbol: str):
+    """Đặt sẵn lựa chọn mã ở trang 'Một tài sản' rồi chuyển sang trang đó."""
+    st.session_state["single_asset_class"] = asset_class
+    if asset_class == ds.ASSET_CRYPTO:
+        crypto_map = ds.get_crypto_list()
+        st.session_state["single_crypto"] = f"{symbol} — {crypto_map.get(symbol, symbol)}"
+    elif asset_class == ds.ASSET_WORLD:
+        st.session_state["single_world"] = symbol
+    elif asset_class == ds.ASSET_VN:
+        st.session_state["single_vn"] = symbol
+    st.switch_page(PAGE_SINGLE)
+
+
 # =============================================================================
 # TRANG 1 — MỘT TÀI SẢN
 # =============================================================================
 def page_single_asset():
-    st.title("📈 Một tài sản")
-    st.sidebar.subheader("Chọn tài sản")
-    asset_class = st.sidebar.selectbox("Loại tài sản", ds.ASSET_CLASSES, key="single_asset_class")
-    symbol = pick_symbol(asset_class, "single")
+    st.subheader("📈 Một tài sản")
+    with st.sidebar:
+        st.markdown("**Chọn tài sản**")
+        with st.container(border=True):
+            asset_class = st.selectbox("Loại tài sản", ds.ASSET_CLASSES, key="single_asset_class")
+            symbol = pick_symbol(asset_class, "single")
+            c1, c2 = st.columns([1.4, 1])
+            with c1:
+                if st.button("🔍 Xem mã khác", width="stretch"):
+                    quick_lookup_dialog()
+            with c2:
+                live = st.toggle("🔴 Live", value=False, help="Tự động làm mới giá mỗi 30 giây")
 
-    c1, c2 = st.sidebar.columns(2)
-    with c1:
-        if st.button("🔍 Xem mã khác", width="stretch"):
-            quick_lookup_dialog()
-    with c2:
-        live = st.toggle("🔴 Live", value=False, help="Tự động làm mới giá mỗi 30 giây")
+    # Ghi lại mã đang xem để trang Chatbot & Danh mục đầu tư có thể dùng làm ngữ cảnh
+    st.session_state["last_single_asset"] = (asset_class, symbol)
+
+    with st.container(border=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button(f"➕ Thêm {symbol} vào danh mục đầu tư", width="stretch", key="add_to_portfolio_btn"):
+                st.session_state["pending_portfolio_add"] = (asset_class, symbol)
+                st.switch_page(PAGE_PORTFOLIO)
+        with c2:
+            if st.button(f"💬 Hỏi Chatbot về {symbol}", width="stretch", key="ask_chatbot_btn"):
+                st.switch_page(PAGE_CHATBOT)
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📋 Summary", "📈 Chart", "📊 Thống kê & Tài chính", "🔍 Phân tích",
@@ -165,29 +200,29 @@ def _live_price_ticker(asset_class, symbol):
 
 @st.fragment
 def render_summary_tab(asset_class, symbol, live: bool):
-    st.subheader(f"Summary — {symbol}")
+    st.markdown(f"##### Summary — {symbol}")
 
     if live:
         _live_price_ticker(asset_class, symbol)
 
-    with st.status("Đang tải dữ liệu Summary...", expanded=False) as status:
+    with st.spinner("Đang tải dữ liệu..."):
         info = ds.get_summary_info(asset_class, symbol)
-        status.update(label="Đã tải xong", state="complete")
 
     if not info:
         st.info("Không có dữ liệu tóm tắt.")
     else:
         items = list(info.items())
         half = (len(items) + 1) // 2
-        c1, c2 = st.columns(2)
-        with c1:
-            st.table(pd.DataFrame(items[:half], columns=["Chỉ tiêu", "Giá trị"]).set_index("Chỉ tiêu"))
-        with c2:
-            st.table(pd.DataFrame(items[half:], columns=["Chỉ tiêu", "Giá trị"]).set_index("Chỉ tiêu"))
-        uih.export_csv_button(
-            pd.DataFrame(items, columns=["Chỉ tiêu", "Giá trị"]).set_index("Chỉ tiêu"),
-            f"{symbol}_summary.csv", "⬇️ Tải Summary (CSV)", key=f"dl_summary_{symbol}",
-        )
+        with st.container(border=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                st.table(pd.DataFrame(items[:half], columns=["Chỉ tiêu", "Giá trị"]).set_index("Chỉ tiêu"))
+            with c2:
+                st.table(pd.DataFrame(items[half:], columns=["Chỉ tiêu", "Giá trị"]).set_index("Chỉ tiêu"))
+            uih.export_csv_button(
+                pd.DataFrame(items, columns=["Chỉ tiêu", "Giá trị"]).set_index("Chỉ tiêu"),
+                f"{symbol}_summary.csv", "⬇️ Tải Summary (CSV)", key=f"dl_summary_{symbol}",
+            )
 
     start, end = ds.period_to_dates("1 Năm")
     hist = ds.get_price_history(asset_class, symbol, start, end)
@@ -210,25 +245,26 @@ def render_summary_tab(asset_class, symbol, live: bool):
 
 @st.fragment
 def render_chart_tab(asset_class, symbol):
-    st.subheader(f"Chart — {symbol}")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        start_date = st.date_input("Từ ngày", datetime.today().date() - timedelta(days=180), key="chart_start")
-    with c2:
-        end_date = st.date_input("Đến ngày", datetime.today().date(), key="chart_end")
-    with c3:
-        sampling = st.selectbox("Sampling", ["Ngày", "Tuần", "Tháng"], key="chart_sampling")
-    with c4:
-        plot_type = st.selectbox("Loại biểu đồ", ["Line", "Candlestick"], key="chart_type")
+    st.markdown(f"##### Chart — {symbol}")
+    with st.container(border=True):
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            start_date = st.date_input("Từ ngày", datetime.today().date() - timedelta(days=180), key="chart_start")
+        with c2:
+            end_date = st.date_input("Đến ngày", datetime.today().date(), key="chart_end")
+        with c3:
+            sampling = st.selectbox("Sampling", ["Ngày", "Tuần", "Tháng"], key="chart_sampling")
+        with c4:
+            plot_type = st.selectbox("Loại biểu đồ", ["Line", "Candlestick"], key="chart_type")
 
-    indicators = st.multiselect(
-        "Chỉ báo kỹ thuật", ["Bollinger Bands", "RSI (14)", "MACD"], key="tech_indicators",
-    )
+        indicators = st.multiselect(
+            "Chỉ báo kỹ thuật (tuỳ chọn)", ["Bollinger Bands", "RSI (14)", "MACD"],
+            placeholder="Chọn chỉ báo cần hiển thị thêm...", key="tech_indicators",
+        )
 
     freq_map = {"Ngày": "D", "Tuần": "W", "Tháng": "ME"}
-    with st.status("Đang tải dữ liệu giá...", expanded=False) as status:
+    with st.spinner("Đang tải dữ liệu giá..."):
         raw = ds.get_price_history(asset_class, symbol, start_date, end_date)
-        status.update(label="Đã tải xong", state="complete")
 
     if raw.empty:
         st.warning("Không lấy được dữ liệu giá cho khoảng thời gian đã chọn.")
@@ -302,52 +338,53 @@ def render_chart_tab(asset_class, symbol):
 
 @st.fragment
 def render_stats_financials_tab(asset_class, symbol):
-    st.subheader(f"Thống kê & Tài chính — {symbol}")
+    st.markdown(f"##### Thống kê & Tài chính — {symbol}")
 
     start, end = ds.period_to_dates("1 Năm")
     hist = ds.get_price_history(asset_class, symbol, start, end)
     if not hist.empty:
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Giá gần nhất", fmt(hist.iloc[-1]["Close"]))
-        c2.metric("Cao nhất 1N", fmt(hist["High"].max()))
-        c3.metric("Thấp nhất 1N", fmt(hist["Low"].min()))
-        ret_1y = hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1
-        c4.metric("Lợi suất 1N", f"{ret_1y:.2%}")
+        with st.container(border=True):
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Giá gần nhất", fmt(hist.iloc[-1]["Close"]))
+            c2.metric("Cao nhất 1N", fmt(hist["High"].max()))
+            c3.metric("Thấp nhất 1N", fmt(hist["Low"].min()))
+            ret_1y = hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1
+            c4.metric("Lợi suất 1N", f"{ret_1y:.2%}")
 
     if asset_class == ds.ASSET_CRYPTO:
         st.info("Tiền điện tử không có báo cáo tài chính doanh nghiệp — chỉ hiển thị thống kê giá ở trên.")
         return
 
     st.markdown("#### Báo cáo tài chính")
-    c1, c2 = st.columns(2)
-    with c1:
-        statement_label = st.selectbox(
-            "Loại báo cáo", ["Kết quả kinh doanh", "Bảng cân đối kế toán", "Lưu chuyển tiền tệ"],
-            key="fin_statement",
-        )
-    with c2:
-        period_label = st.selectbox("Kỳ báo cáo", ["Năm", "Quý"], key="fin_period")
+    with st.container(border=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            statement_label = st.selectbox(
+                "Loại báo cáo", ["Kết quả kinh doanh", "Bảng cân đối kế toán", "Lưu chuyển tiền tệ"],
+                key="fin_statement",
+            )
+        with c2:
+            period_label = st.selectbox("Kỳ báo cáo", ["Năm", "Quý"], key="fin_period")
 
-    statement_key = {"Kết quả kinh doanh": "income", "Bảng cân đối kế toán": "balance",
-                      "Lưu chuyển tiền tệ": "cashflow"}[statement_label]
-    period_key = {"Năm": "year", "Quý": "quarter"}[period_label]
+        statement_key = {"Kết quả kinh doanh": "income", "Bảng cân đối kế toán": "balance",
+                          "Lưu chuyển tiền tệ": "cashflow"}[statement_label]
+        period_key = {"Năm": "year", "Quý": "quarter"}[period_label]
 
-    with st.status("Đang tải báo cáo tài chính...", expanded=False) as status:
-        data = ds.get_financials(asset_class, symbol, statement_key, period_key)
-        status.update(label="Đã tải xong", state="complete")
+        with st.spinner("Đang tải báo cáo tài chính..."):
+            data = ds.get_financials(asset_class, symbol, statement_key, period_key)
 
-    if data is None or data.empty:
-        st.warning("Không có dữ liệu báo cáo tài chính cho lựa chọn này.")
-    else:
-        uih.show_table(data, key=f"fin_table_{symbol}_{statement_key}_{period_key}", height=400)
-        uih.export_excel_button(
-            {f"{statement_label}": data}, f"{symbol}_{statement_key}_{period_key}.xlsx",
-            "⬇️ Tải báo cáo (Excel)", key=f"dl_fin_xlsx_{symbol}_{statement_key}",
-        )
+        if data is None or data.empty:
+            st.warning("Không có dữ liệu báo cáo tài chính cho lựa chọn này.")
+        else:
+            uih.show_table(data, key=f"fin_table_{symbol}_{statement_key}_{period_key}", height=400)
+            uih.export_excel_button(
+                {f"{statement_label}": data}, f"{symbol}_{statement_key}_{period_key}.xlsx",
+                "⬇️ Tải báo cáo (Excel)", key=f"dl_fin_xlsx_{symbol}_{statement_key}",
+            )
 
 
 def render_analysis_tab(asset_class, symbol):
-    st.subheader(f"Phân tích — {symbol}")
+    st.markdown(f"##### Phân tích — {symbol}")
     if asset_class != ds.ASSET_WORLD:
         st.info(
             "Ước tính từ giới phân tích (Analyst Estimates) hiện chỉ khả dụng ổn định cho "
@@ -365,27 +402,27 @@ def render_analysis_tab(asset_class, symbol):
 
 @st.fragment
 def render_backtest_tab(asset_class, symbol):
-    st.subheader(f"Backtest chiến lược SMA Crossover — {symbol}")
+    st.markdown(f"##### Backtest chiến lược SMA Crossover — {symbol}")
     st.caption(
         "So sánh chiến lược 'giữ vị thế mua khi SMA nhanh > SMA chậm' với Mua & Giữ (Buy & Hold). "
         "Không tính phí giao dịch/trượt giá — chỉ mang tính minh hoạ học tập."
     )
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        fast = st.number_input("SMA nhanh (ngày)", 5, 100, 20, key="bt_fast")
-    with c2:
-        slow = st.number_input("SMA chậm (ngày)", 10, 300, 50, key="bt_slow")
-    with c3:
-        period_label = st.selectbox("Khoảng dữ liệu", list(ds.PERIOD_DAYS.keys()), index=4, key="bt_period")
+    with st.container(border=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            fast = st.number_input("SMA nhanh (ngày)", 5, 100, 20, key="bt_fast")
+        with c2:
+            slow = st.number_input("SMA chậm (ngày)", 10, 300, 50, key="bt_slow")
+        with c3:
+            period_label = st.selectbox("Khoảng dữ liệu", list(ds.PERIOD_DAYS.keys()), index=4, key="bt_period")
 
     if fast >= slow:
         st.warning("SMA nhanh phải nhỏ hơn SMA chậm.")
         return
 
     start, end = ds.period_to_dates(period_label)
-    with st.status("Đang tải dữ liệu & chạy backtest...", expanded=False) as status:
+    with st.spinner("Đang tải dữ liệu & chạy backtest..."):
         hist = ds.get_price_history(asset_class, symbol, start, end)
-        status.update(label="Đã tải xong", state="complete")
 
     if hist.empty or len(hist) < slow + 10:
         st.warning("Không đủ dữ liệu để backtest với khoảng thời gian/SMA đã chọn — thử khoảng thời gian dài hơn.")
@@ -407,7 +444,7 @@ def render_backtest_tab(asset_class, symbol):
 
 @st.fragment
 def render_valuation_tab(asset_class, symbol):
-    st.subheader(f"Định giá nhanh — {symbol}")
+    st.markdown(f"##### Định giá nhanh — {symbol}")
     if asset_class == ds.ASSET_CRYPTO:
         st.info("Graham Number / DCF áp dụng cho cổ phiếu doanh nghiệp, không áp dụng cho tiền điện tử.")
         return
@@ -420,46 +457,50 @@ def render_valuation_tab(asset_class, symbol):
     st.markdown("#### 1. Graham Number")
     st.caption("Công thức Benjamin Graham: √(22.5 × EPS × BVPS) — ước tính giá hợp lý tối đa cho cổ phiếu giá trị.")
     c1, c2 = st.columns(2)
-    with c1:
-        eps = st.number_input("EPS (thu nhập/cổ phiếu)", value=float(vinputs["eps"] or 0.0), key="val_eps")
-    with c2:
-        bvps = st.number_input("BVPS (giá trị sổ sách/cổ phiếu)",
-                                value=float(vinputs["book_value_per_share"] or 0.0), key="val_bvps")
-    gn = val.graham_number(eps, bvps)
-    if gn:
-        st.metric("Graham Number", fmt(gn))
-    else:
-        st.info("Cần EPS và BVPS đều > 0 để tính Graham Number.")
+    st.markdown("#### 1. Graham Number")
+    st.caption("Công thức Benjamin Graham: √(22.5 × EPS × BVPS) — ước tính giá hợp lý tối đa cho cổ phiếu giá trị.")
+    with st.container(border=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            eps = st.number_input("EPS (thu nhập/cổ phiếu)", value=float(vinputs["eps"] or 0.0), key="val_eps")
+        with c2:
+            bvps = st.number_input("BVPS (giá trị sổ sách/cổ phiếu)",
+                                    value=float(vinputs["book_value_per_share"] or 0.0), key="val_bvps")
+        gn = val.graham_number(eps, bvps)
+        if gn:
+            st.metric("Graham Number", fmt(gn))
+        else:
+            st.info("Cần EPS và BVPS đều > 0 để tính Graham Number.")
 
-    st.divider()
     st.markdown("#### 2. DCF (Discounted Cash Flow)")
     st.caption("Mô hình 2 giai đoạn: tăng trưởng đều trong N năm, sau đó tăng trưởng vĩnh viễn (Gordon Growth).")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        fcf0 = st.number_input("FCF năm gần nhất", value=float(vinputs["fcf"] or 0.0), key="val_fcf")
-        growth = st.number_input("Tăng trưởng FCF dự báo (%/năm)", 0.0, 50.0, 10.0, key="val_growth") / 100
-    with c2:
-        discount = st.number_input("Tỉ lệ chiết khấu / WACC (%/năm)", 1.0, 30.0, 12.0, key="val_discount") / 100
-        terminal = st.number_input("Tăng trưởng vĩnh viễn (%/năm)", 0.0, 10.0, 3.0, key="val_terminal") / 100
-    with c3:
-        years = st.number_input("Số năm dự báo", 1, 15, 5, key="val_years")
-        shares = st.number_input("Số CP lưu hành", value=float(vinputs["shares_outstanding"] or 0.0),
-                                  key="val_shares")
+    with st.container(border=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            fcf0 = st.number_input("FCF năm gần nhất", value=float(vinputs["fcf"] or 0.0), key="val_fcf")
+            growth = st.number_input("Tăng trưởng FCF dự báo (%/năm)", 0.0, 50.0, 10.0, key="val_growth") / 100
+        with c2:
+            discount = st.number_input("Tỉ lệ chiết khấu / WACC (%/năm)", 1.0, 30.0, 12.0, key="val_discount") / 100
+            terminal = st.number_input("Tăng trưởng vĩnh viễn (%/năm)", 0.0, 10.0, 3.0, key="val_terminal") / 100
+        with c3:
+            years = st.number_input("Số năm dự báo", 1, 15, 5, key="val_years")
+            shares = st.number_input("Số CP lưu hành", value=float(vinputs["shares_outstanding"] or 0.0),
+                                      key="val_shares")
 
-    if fcf0 <= 0:
-        st.info("Nhập FCF năm gần nhất > 0 để tính DCF.")
-        return
+        if fcf0 <= 0:
+            st.info("Nhập FCF năm gần nhất > 0 để tính DCF.")
+            return
 
-    dcf_res = val.dcf_intrinsic_value(fcf0, growth, discount, terminal, int(years),
-                                       shares if shares > 0 else None)
-    if dcf_res is None:
-        st.warning("Tỉ lệ chiết khấu phải lớn hơn tăng trưởng vĩnh viễn để mô hình hội tụ.")
-        return
+        dcf_res = val.dcf_intrinsic_value(fcf0, growth, discount, terminal, int(years),
+                                           shares if shares > 0 else None)
+        if dcf_res is None:
+            st.warning("Tỉ lệ chiết khấu phải lớn hơn tăng trưởng vĩnh viễn để mô hình hội tụ.")
+            return
 
-    c1, c2 = st.columns(2)
-    c1.metric("Giá trị doanh nghiệp ước tính (Enterprise Value)", fmt(dcf_res["enterprise_value"]))
-    if "value_per_share" in dcf_res:
-        c2.metric("Giá trị ước tính / cổ phiếu", fmt(dcf_res["value_per_share"]))
+        c1, c2 = st.columns(2)
+        c1.metric("Giá trị doanh nghiệp ước tính (Enterprise Value)", fmt(dcf_res["enterprise_value"]))
+        if "value_per_share" in dcf_res:
+            c2.metric("Giá trị ước tính / cổ phiếu", fmt(dcf_res["value_per_share"]))
     st.caption(
         "Kết quả DCF rất nhạy với giả định tăng trưởng/chiết khấu — chỉ mang tính tham khảo, "
         "không phải khuyến nghị đầu tư."
@@ -467,20 +508,21 @@ def render_valuation_tab(asset_class, symbol):
 
 
 def render_news_tab(asset_class, symbol):
-    st.subheader(f"Tin tức gần đây — {symbol}")
+    st.markdown(f"##### Tin tức gần đây — {symbol}")
     news = ds.get_news(asset_class, symbol, limit=8)
     if not news:
         st.info("Không lấy được tin tức cho mã này (nguồn có thể tạm thời không khả dụng).")
         return
 
-    for item in news:
-        title = item.get("title", "")
-        link = item.get("link")
-        publisher = item.get("publisher") or ""
-        if link:
-            st.markdown(f"- [{title}]({link}) — *{publisher}*")
-        else:
-            st.markdown(f"- {title} — *{publisher}*")
+    with st.container(border=True):
+        for item in news:
+            title = item.get("title", "")
+            link = item.get("link")
+            publisher = item.get("publisher") or ""
+            if link:
+                st.markdown(f"- [{title}]({link}) — *{publisher}*")
+            else:
+                st.markdown(f"- {title} — *{publisher}*")
 
     st.divider()
     st.markdown("#### 🤖 Nhờ AI tóm tắt & đánh giá tác động")
@@ -505,22 +547,40 @@ def render_news_tab(asset_class, symbol):
 # TRANG 2 — DANH MỤC ĐẦU TƯ
 # =============================================================================
 def page_portfolio():
-    st.title("💼 Danh mục đầu tư")
-    st.sidebar.subheader("Cấu hình danh mục")
-    benchmark_class = st.sidebar.radio(
-        "Benchmark CAPM/APT dùng chỉ số nào?",
-        [ds.ASSET_WORLD, ds.ASSET_VN], key="bench_class",
-        help="S&P500 nếu chọn Thế giới, VNINDEX nếu chọn Việt Nam.",
-    )
-    rf_pct = st.sidebar.number_input("Lãi suất phi rủi ro (%/năm)", 0.0, 20.0, 4.5, 0.1)
-    rf_annual = rf_pct / 100
-    period_label = st.sidebar.selectbox("Khoảng dữ liệu lịch sử", list(ds.PERIOD_DAYS.keys()), index=3)
-    start, end = ds.period_to_dates(period_label)
-    base_currency = st.sidebar.radio(
-        "Đơn vị tiền tệ chung danh mục", ["USD", "VND"], key="base_currency",
-        help="Quy đổi tất cả tài sản về 1 đơn vị tiền tệ trước khi tính lợi suất danh mục — "
-             "quan trọng khi trộn CP Việt Nam (VND) với CP thế giới/crypto (USD).",
-    )
+    st.subheader("💼 Danh mục đầu tư")
+
+    # Nếu vừa bấm "Thêm vào danh mục" từ trang Một tài sản, gộp mã đó vào lựa chọn
+    # TRƯỚC khi các multiselect được khởi tạo.
+    pending = st.session_state.pop("pending_portfolio_add", None)
+    if pending:
+        pac, psym = pending
+        key_map = {ds.ASSET_WORLD: "port_world_multi", ds.ASSET_VN: "port_vn_multi",
+                   ds.ASSET_CRYPTO: "port_crypto_multi"}
+        pkey = key_map.get(pac)
+        if pkey:
+            current = list(st.session_state.get(pkey, []))
+            if psym not in current:
+                current.append(psym)
+            st.session_state[pkey] = current
+            st.toast(f"Đã thêm {psym} vào danh mục.", icon="✅")
+
+    with st.sidebar:
+        st.markdown("**Cấu hình danh mục**")
+        with st.container(border=True):
+            benchmark_class = st.radio(
+                "Benchmark CAPM/APT dùng chỉ số nào?",
+                [ds.ASSET_WORLD, ds.ASSET_VN], key="bench_class",
+                help="S&P500 nếu chọn Thế giới, VNINDEX nếu chọn Việt Nam.",
+            )
+            rf_pct = st.number_input("Lãi suất phi rủi ro (%/năm)", 0.0, 20.0, 4.5, 0.1)
+            rf_annual = rf_pct / 100
+            period_label = st.selectbox("Khoảng dữ liệu lịch sử", list(ds.PERIOD_DAYS.keys()), index=3)
+            start, end = ds.period_to_dates(period_label)
+            base_currency = st.radio(
+                "Đơn vị tiền tệ chung danh mục", ["USD", "VND"], key="base_currency",
+                help="Quy đổi tất cả tài sản về 1 đơn vị tiền tệ trước khi tính lợi suất danh mục — "
+                     "quan trọng khi trộn CP Việt Nam (VND) với CP thế giới/crypto (USD).",
+            )
 
     with st.expander("📤 Nạp danh mục có sẵn từ file CSV (tuỳ chọn)"):
         st.caption("Cột cần có: `asset_class` (world/vn/crypto), `symbol`, `weight` (%).")
@@ -553,12 +613,25 @@ def page_portfolio():
             except Exception as e:
                 st.error(f"Không đọc được file: {e}")
 
-    st.subheader("Chọn danh mục")
+    st.markdown("##### Chọn danh mục")
     picked = multi_pick_symbols("port")
 
     if len(picked) < 2:
         st.info("Chọn ít nhất 2 tài sản để phân tích danh mục.")
         return
+
+    with st.container(border=True):
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            jump_label = st.selectbox(
+                "🔍 Xem chi tiết 1 mã trong danh mục ở trang 'Một tài sản'",
+                [f"{ac} — {sym}" for ac, sym in picked], key="jump_to_single_select",
+            )
+        with c2:
+            st.write("")
+            if st.button("Xem chi tiết", width="stretch", key="jump_to_single_btn"):
+                jac, jsym = jump_label.split(" — ")
+                _jump_to_single_asset(jac, jsym)
 
     st.markdown("#### Tỉ trọng danh mục (có thể sửa trực tiếp trong bảng)")
     uploaded_w = st.session_state.get("uploaded_weights", {})
@@ -569,20 +642,21 @@ def page_portfolio():
     } for ac, sym in picked]
     weight_df = pd.DataFrame(weight_rows)
 
-    try:
-        edited = st.data_editor(
-            weight_df, key="weight_editor", width="stretch", hide_index=True,
-            disabled=["Loại tài sản", "Mã"],
-            column_config={"Tỉ trọng (%)": st.column_config.NumberColumn(min_value=0.0, max_value=100.0, step=0.5)},
-        )
-    except Exception:
-        edited = weight_df  # fallback nếu phiên bản Streamlit quá cũ không có data_editor
+    with st.container(border=True):
+        try:
+            edited = st.data_editor(
+                weight_df, key="weight_editor", width="stretch", hide_index=True,
+                disabled=["Loại tài sản", "Mã"],
+                column_config={"Tỉ trọng (%)": st.column_config.NumberColumn(min_value=0.0, max_value=100.0, step=0.5)},
+            )
+        except Exception:
+            edited = weight_df  # fallback nếu phiên bản Streamlit quá cũ không có data_editor
 
-    total_w = edited["Tỉ trọng (%)"].sum()
-    if total_w == 0:
-        st.error("Tổng tỉ trọng phải > 0.")
-        return
-    st.caption(f"Tổng tỉ trọng nhập: {total_w:.1f}% → sẽ tự chuẩn hoá về 100% khi tính toán.")
+        total_w = edited["Tỉ trọng (%)"].sum()
+        if total_w == 0:
+            st.error("Tổng tỉ trọng phải > 0.")
+            return
+        st.caption(f"Tổng tỉ trọng nhập: {total_w:.1f}% → sẽ tự chuẩn hoá về 100% khi tính toán.")
     weights = {f"{r['Loại tài sản']}:{r['Mã']}": r["Tỉ trọng (%)"] for _, r in edited.iterrows()}
 
     with st.status("Đang tải giá & tính toán danh mục...", expanded=True) as status:
@@ -640,6 +714,10 @@ def page_portfolio():
         render_geo_tab(picked)
 
     st.divider()
+    c1, c2 = st.columns([1, 3])
+    with c1:
+        if st.button("💬 Hỏi Chatbot về danh mục này", key="ask_chatbot_portfolio_btn"):
+            st.switch_page(PAGE_CHATBOT)
     render_portfolio_export(returns_df, bench_returns, rf_annual, benchmark_class,
                              norm_weights, valid_keys)
 
@@ -962,7 +1040,7 @@ def render_portfolio_export(returns_df, bench_returns, rf_annual, benchmark_clas
 # TRANG 3 — CHATBOT
 # =============================================================================
 def page_chatbot():
-    st.title("💬 Chatbot hỗ trợ đầu tư")
+    st.subheader("💬 Chatbot hỗ trợ đầu tư")
     st.caption("Dùng Anthropic Claude API. Nhập API key ở sidebar (chỉ lưu trong phiên làm việc).")
 
     try:
@@ -976,14 +1054,42 @@ def page_chatbot():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    context = chatbot.build_context(
-        asset_class=st.session_state.get("single_asset_class"),
-        symbol=None,
-        portfolio_tickers=st.session_state.get("last_portfolio_tickers"),
-        port_stats=st.session_state.get("last_portfolio_stats"),
+    # Ngữ cảnh liên kết với 2 trang kia: mã vừa xem ở "Một tài sản" + danh mục vừa
+    # phân tích ở "Danh mục đầu tư" (nếu có). Người dùng có thể tắt bớt nếu muốn.
+    last_single = st.session_state.get("last_single_asset")  # (asset_class, symbol) hoặc None
+    has_portfolio_ctx = bool(st.session_state.get("last_portfolio_tickers"))
+
+    st.sidebar.markdown("**Ngữ cảnh gửi kèm**")
+    include_single = st.sidebar.checkbox(
+        f"Mã vừa xem: {last_single[1]}" if last_single else "Mã vừa xem (chưa có)",
+        value=bool(last_single), disabled=not last_single, key="ctx_include_single",
     )
-    with st.expander("Ngữ cảnh hiện tại gửi kèm cho chatbot"):
+    include_portfolio = st.sidebar.checkbox(
+        "Danh mục vừa phân tích" if has_portfolio_ctx else "Danh mục vừa phân tích (chưa có)",
+        value=has_portfolio_ctx, disabled=not has_portfolio_ctx, key="ctx_include_portfolio",
+    )
+
+    summary_info = None
+    asset_class = symbol = None
+    if include_single and last_single:
+        asset_class, symbol = last_single
+        with st.spinner("Đang lấy số liệu mới nhất cho ngữ cảnh..."):
+            summary_info = ds.get_summary_info(asset_class, symbol)
+
+    context = chatbot.build_context(
+        asset_class=asset_class,
+        symbol=symbol,
+        summary_info=summary_info,
+        portfolio_tickers=st.session_state.get("last_portfolio_tickers") if include_portfolio else None,
+        port_stats=st.session_state.get("last_portfolio_stats") if include_portfolio else None,
+    )
+    with st.expander("Ngữ cảnh hiện tại gửi kèm cho chatbot", expanded=bool(last_single or has_portfolio_ctx)):
         st.text(context)
+        if not last_single and not has_portfolio_ctx:
+            st.caption(
+                "Chưa có ngữ cảnh nào — hãy xem qua 1 mã ở trang 'Một tài sản' hoặc phân tích "
+                "1 danh mục ở 'Danh mục đầu tư' trước, ngữ cảnh sẽ tự xuất hiện ở đây."
+            )
 
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
@@ -1011,6 +1117,13 @@ def page_chatbot():
 # =============================================================================
 # MAIN — theme/logo, auth gate, multipage navigation
 # =============================================================================
+# Định nghĩa ở cấp module (không phải trong main()) để các hàm khác trong file
+# có thể gọi st.switch_page(PAGE_...) tạo liên kết điều hướng giữa 3 trang.
+PAGE_SINGLE = st.Page(page_single_asset, title="Một tài sản", icon="📈", url_path="single-asset", default=True)
+PAGE_PORTFOLIO = st.Page(page_portfolio, title="Danh mục đầu tư", icon="💼", url_path="portfolio")
+PAGE_CHATBOT = st.Page(page_chatbot, title="Chatbot", icon="💬", url_path="chatbot")
+
+
 def main():
     try:
         st.logo("assets/logo.png", icon_image="assets/icon.png")
@@ -1020,11 +1133,7 @@ def main():
     if not auth.require_login():
         return  # auth.require_login() đã tự vẽ màn hình đăng nhập + st.stop()
 
-    single = st.Page(page_single_asset, title="Một tài sản", icon="📈", url_path="single-asset", default=True)
-    portfolio = st.Page(page_portfolio, title="Danh mục đầu tư", icon="💼", url_path="portfolio")
-    bot = st.Page(page_chatbot, title="Chatbot", icon="💬", url_path="chatbot")
-
-    nav = st.navigation([single, portfolio, bot])
+    nav = st.navigation([PAGE_SINGLE, PAGE_PORTFOLIO, PAGE_CHATBOT])
     nav.run()
 
 
