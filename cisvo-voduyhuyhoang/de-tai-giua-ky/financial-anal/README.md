@@ -65,6 +65,45 @@ hack):
 - Giảm bớt tiêu đề lặp lại/quá to (`st.title` → `st.subheader`/`st.markdown` ở cấp trang
   và tab) cho đỡ nặng nề.
 
+## Trang chủ (Home) — tổng quan + đề xuất AI (thêm theo yêu cầu)
+
+Trang mặc định khi mở app (`page_home()` trong `app.py`). 4 phần:
+
+- **Tỉ trọng danh mục hiện tại**: biểu đồ tròn + Lợi suất kỳ vọng/Độ biến động/Sharpe/Max
+  Drawdown — lấy từ lần phân tích gần nhất ở trang "Danh mục đầu tư" (`last_portfolio_weights`,
+  `last_portfolio_stats` trong session_state). Chưa phân tích danh mục nào thì hiện nút dẫn sang.
+- **🤖 Đánh giá AI theo từng mã**: nút bấm gọi Claude (`chatbot.assess_portfolio()`), đưa
+  tỉ trọng + lợi suất kỳ vọng + độ biến động + beta (nếu có từ tab CAPM) của từng mã, AI trả
+  về nhãn **🟢 An toàn / 🟡 Cân nhắc / 🔴 Rủi ro cao** kèm 1 câu giải thích. Đây là góc nhìn
+  tham khảo diễn giải từ số liệu thống kê — không phải khuyến nghị đầu tư.
+- **📰 Tin tức quan trọng**: gộp tin từ các mã trong danh mục (hoặc vài mã tiêu biểu nếu
+  chưa có danh mục).
+- **💹 Giá thị trường**: 3 tab Top 10 Tiền điện tử / Top 10 CP Việt Nam / Top 10 CP Thế giới,
+  tự làm mới định kỳ (`st.fragment(run_every=...)`).
+
+### Vấn đề thật phát hiện được khi build phần Top 10 real-time (và cách đã sửa)
+
+Trong lúc test bằng `AppTest`, phát hiện **rate limit thật của vnstock** (gói khách: 20
+request/phút, có xác nhận qua log lỗi thật khi vượt hạn mức):
+
+1. **Không auto-refresh bảng VN mỗi 30s như 2 bảng kia** — 10 mã × mỗi 30s sẽ ăn hết sạch
+   quota liên tục, làm nghẽn các phần khác của app cũng đang dùng vnstock (Một tài sản,
+   Danh mục đầu tư). Đã đổi bảng VN sang làm mới mỗi **90 giây**.
+2. **vnstock không có API lấy giá hàng loạt như `yf.download()`** — ban đầu code gọi lặp
+   10 lần `Quote.history()` (1 lần/mã), vừa chậm vừa tốn quota. Đã đổi sang dùng
+   `Trading(source="VCI").price_board(symbols_list)` — 1 lần gọi cho cả 10 mã. **Lưu ý**:
+   tên cột trả về được code tự dò theo từ khoá (symbol/giá khớp lệnh/% thay đổi...) vì
+   sandbox lúc build bị vnstock tạm chặn IP (403) sau nhiều lần test, không lấy được response
+   thật để xác nhận chính xác tên cột — nếu dò sai, bảng sẽ hiện "—" thay vì giá (không
+   crash, nhưng cũng không có dữ liệu). **Bạn cần tự chạy thử ở máy có mạng để xác nhận
+   bảng Top 10 VN thật sự hiển thị giá đúng** — nếu không, báo lại để mình chỉnh tên cột.
+3. **Bỏ cơ chế fallback gọi lại từng mã khi `price_board` lỗi** — thử ban đầu nhưng phát
+   hiện vnstock tự retry/backoff nội bộ khá lâu mỗi lần gọi (có lúc ~7-15s/mã), nên fallback
+   10 mã tuần tự có thể khiến cả trang treo hơn 1 phút khi API đang bị giới hạn. Thay vào đó:
+   chỉ gọi `price_board` **một lần**, giới hạn thời gian chờ cứng **12 giây**
+   (`concurrent.futures` timeout) — quá thời gian thì trả "—" cho các mã chưa có, không để
+   treo trang.
+
 ## Liên kết giữa 3 trang (sửa sau phản hồi "3 trang tách rời nhau")
 
 Trước đó Chatbot có 1 lỗi thật: luôn đọc `symbol=None` nên chưa từng biết bạn đang xem
@@ -90,14 +129,14 @@ Kỹ thuật: dùng `st.switch_page()` (API chính thức của Streamlit cho mu
 
 ```
 findash_vn/
-├── app.py                     # Streamlit UI chính — multipage, fragment, dialog, status...
-├── data_sources.py            # Truy xuất dữ liệu hợp nhất + FX + tin tức + input định giá
+├── app.py                     # Streamlit UI chính — Trang chủ, multipage, fragment, dialog, status...
+├── data_sources.py            # Truy xuất dữ liệu hợp nhất + FX + tin tức + input định giá + bảng giá real-time
 ├── portfolio_analytics.py     # CAPM, APT, Monte Carlo, VaR/CVaR, tối ưu hoá, rủi ro nâng cao
 ├── technical_indicators.py    # RSI, MACD, Bollinger Bands
 ├── valuation.py                # Graham Number, DCF
 ├── backtest.py                 # Backtest SMA Crossover vs Mua & Giữ
-├── chatbot.py                   # Anthropic Claude API + tóm tắt tin tức
-├── ui_helpers.py                # Bảng AgGrid (fallback) + xuất báo cáo CSV/Excel/PDF
+├── chatbot.py                   # Anthropic Claude API + tóm tắt tin tức + đánh giá AI danh mục
+├── ui_helpers.py                # Bảng AgGrid (fallback) + xuất báo cáo CSV/Excel/PDF (bảng vẽ bằng matplotlib.table)
 ├── auth.py                      # Cổng đăng nhập tuỳ chọn (none / password / Google OIDC)
 ├── assets/
 │   ├── logo.png

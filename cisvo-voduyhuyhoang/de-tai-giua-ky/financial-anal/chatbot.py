@@ -86,3 +86,51 @@ def summarize_news(client, symbol: str, headlines: list, model: str = DEFAULT_MO
         messages=[{"role": "user", "content": prompt}],
     )
     return "".join(block.text for block in response.content if block.type == "text")
+
+
+def assess_portfolio(client, holdings: list, model: str = DEFAULT_MODEL) -> list:
+    """
+    holdings: list[dict] mỗi phần tử {"symbol":, "weight_pct":, "expected_return":,
+              "volatility":, "beta": (tuỳ chọn)}
+    Trả về list[dict] {"symbol":, "verdict":, "note":} với verdict là một trong:
+    "An toàn" / "Cân nhắc" / "Rủi ro cao". Trả về [] nếu không parse được JSON.
+
+    Đây là góc nhìn tham khảo do AI diễn giải từ số liệu thống kê — KHÔNG phải khuyến
+    nghị đầu tư, không thay thế thẩm định tài chính chuyên sâu.
+    """
+    lines = []
+    for h in holdings:
+        line = (f"- {h['symbol']}: tỉ trọng {h['weight_pct']:.1f}%, "
+                f"lợi suất kỳ vọng {h.get('expected_return', 0):.1%}, "
+                f"độ biến động {h.get('volatility', 0):.1%}")
+        if h.get("beta") is not None:
+            line += f", beta {h['beta']:.2f}"
+        lines.append(line)
+    holdings_text = "\n".join(lines)
+
+    prompt = (
+        "Đây là các khoản mục trong một danh mục đầu tư:\n" + holdings_text +
+        "\n\nVới MỖI mã, đánh giá nhanh mức độ rủi ro/chú ý cần thiết dựa trên số liệu trên "
+        "(độ biến động cao, beta cao, tỉ trọng tập trung lớn... là các yếu tố cần lưu ý). "
+        "Trả lời CHỈ bằng JSON thuần (không markdown, không giải thích thêm ngoài JSON), "
+        "là một mảng, mỗi phần tử có dạng: "
+        '{"symbol": "...", "verdict": "An toàn" | "Cân nhắc" | "Rủi ro cao", "note": "giải thích 1 câu ngắn"}'
+    )
+    response = client.messages.create(
+        model=model, max_tokens=1024,
+        system=("Bạn là trợ lý phân tích danh mục đầu tư. Luôn trả lời đúng định dạng JSON "
+                "được yêu cầu, phần note viết bằng tiếng Việt, ngắn gọn."),
+        messages=[{"role": "user", "content": prompt}],
+    )
+    text = "".join(block.text for block in response.content if block.type == "text")
+
+    import json
+    import re
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if not match:
+        return []
+    try:
+        result = json.loads(match.group(0))
+        return result if isinstance(result, list) else []
+    except Exception:
+        return []

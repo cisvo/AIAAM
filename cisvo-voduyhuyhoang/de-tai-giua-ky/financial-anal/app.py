@@ -6,7 +6,7 @@ FinDash-VN — Dashboard thông tin đầu tư có hỗ trợ Chatbot.
 Chạy: streamlit run app.py
 
 Tính năng chính:
-    - Multipage app thật (st.navigation/st.Page): Một tài sản / Danh mục đầu tư / Chatbot
+    - Multipage app thật (st.navigation/st.Page): Đánh Giá Tài Sản / Danh mục đầu tư / Chatbot
     - Cổng đăng nhập tuỳ chọn (auth.py: none / password / Google OIDC)
     - Theme tối + logo riêng (.streamlit/config.toml, assets/logo.png)
     - st.fragment cho các phần nặng (chart, CAPM/APT, Monte Carlo) -> đổi input
@@ -127,7 +127,7 @@ def quick_lookup_dialog():
 
 
 def _jump_to_single_asset(asset_class: str, symbol: str):
-    """Đặt sẵn lựa chọn mã ở trang 'Một tài sản' rồi chuyển sang trang đó."""
+    """Đặt sẵn lựa chọn mã ở trang 'Đánh Giá Tài Sản' rồi chuyển sang trang đó."""
     st.session_state["single_asset_class"] = asset_class
     if asset_class == ds.ASSET_CRYPTO:
         crypto_map = ds.get_crypto_list()
@@ -140,10 +140,166 @@ def _jump_to_single_asset(asset_class: str, symbol: str):
 
 
 # =============================================================================
+# TRANG 0 — TRANG CHỦ (Overview)
+# =============================================================================
+def page_home():
+    st.subheader("🏠 Trang chủ")
+
+    weights = st.session_state.get("last_portfolio_weights")
+    tickers = st.session_state.get("last_portfolio_tickers")
+    port_stats = st.session_state.get("last_portfolio_stats")
+    per_asset = st.session_state.get("last_portfolio_per_asset_stats", {})
+    capm_df = st.session_state.get("last_capm_df")
+
+    # --- Tỉ trọng danh mục hiện tại ---
+    st.markdown("#### 📊 Danh mục hiện tại")
+    if not weights or not tickers:
+        st.info("Chưa có danh mục nào được phân tích.")
+        if st.button("💼 Đi tới Danh mục đầu tư để bắt đầu", key="home_go_portfolio"):
+            st.switch_page(PAGE_PORTFOLIO)
+    else:
+        c1, c2 = st.columns([1.2, 1])
+        with c1:
+            w_df = pd.DataFrame({"Tài sản": list(weights.keys()), "Tỉ trọng (%)": list(weights.values())})
+            st.plotly_chart(px.pie(w_df, names="Tài sản", values="Tỉ trọng (%)", title="Phân bổ danh mục"),
+                             width="stretch")
+        with c2:
+            if port_stats:
+                st.metric("Lợi suất kỳ vọng (năm)", f"{port_stats.get('expected_return_annual', 0):.2%}")
+                st.metric("Độ biến động (năm)", f"{port_stats.get('volatility_annual', 0):.2%}")
+                st.metric("Sharpe Ratio", f"{port_stats.get('sharpe_ratio', 0):.2f}")
+                mdd = port_stats.get("max_drawdown")
+                if mdd is not None:
+                    st.metric("Max Drawdown", f"{mdd:.2%}")
+            if st.button("💼 Xem chi tiết danh mục", key="home_view_portfolio"):
+                st.switch_page(PAGE_PORTFOLIO)
+
+        st.markdown("##### 🤖 Đánh giá AI theo từng mã")
+        st.caption(
+            "Góc nhìn tham khảo do AI diễn giải từ số liệu thống kê (biến động, beta, tỉ trọng) — "
+            "KHÔNG phải khuyến nghị đầu tư."
+        )
+        api_key = st.session_state.get("anthropic_api_key", "")
+        if not api_key:
+            st.info("Nhập Anthropic API Key ở trang Chatbot (sidebar) để bật đánh giá AI.")
+        else:
+            if st.button("🔄 Phân tích danh mục bằng AI", key="home_ai_assess"):
+                holdings = []
+                for key, w in weights.items():
+                    stats = per_asset.get(key, {})
+                    beta = None
+                    if capm_df is not None and key in getattr(capm_df, "index", []):
+                        try:
+                            beta = float(capm_df.loc[key, "Beta"])
+                        except Exception:
+                            beta = None
+                    symbol = key.split(":", 1)[1] if ":" in key else key
+                    holdings.append({
+                        "symbol": symbol, "weight_pct": w,
+                        "expected_return": stats.get("expected_return_annual", 0),
+                        "volatility": stats.get("volatility_annual", 0), "beta": beta,
+                    })
+                try:
+                    client = chatbot.get_client(api_key)
+                    with st.spinner("AI đang phân tích danh mục..."):
+                        result = chatbot.assess_portfolio(
+                            client, holdings, model=st.session_state.get("anthropic_model", chatbot.DEFAULT_MODEL))
+                    if result:
+                        st.session_state["home_ai_assessment"] = result
+                    else:
+                        st.warning("AI không trả về kết quả hợp lệ, thử lại sau.")
+                except Exception as e:
+                    st.error(f"Lỗi khi gọi Claude API: {e}")
+
+            result = st.session_state.get("home_ai_assessment")
+            if result:
+                res_df = pd.DataFrame(result).rename(
+                    columns={"symbol": "Mã", "verdict": "Đánh giá", "note": "Ghi chú"})
+
+                def _badge(v):
+                    return {"An toàn": "🟢 An toàn", "Cân nhắc": "🟡 Cân nhắc",
+                            "Rủi ro cao": "🔴 Rủi ro cao"}.get(v, v)
+
+                if "Đánh giá" in res_df.columns:
+                    res_df["Đánh giá"] = res_df["Đánh giá"].map(_badge)
+                st.dataframe(res_df, width="stretch", hide_index=True)
+
+    st.divider()
+
+    # --- Tin tức quan trọng ---
+    st.markdown("#### 📰 Tin tức quan trọng")
+    if tickers:
+        news_keys = tickers[:5]
+    else:
+        news_keys = [f"{ds.ASSET_WORLD}:{s}" for s in ds.WORLD_TOP10[:3]]
+        st.caption("Chưa có danh mục — hiển thị tin tức của vài mã tiêu biểu.")
+    with st.spinner("Đang tải tin tức..."):
+        all_news = []
+        for key in news_keys:
+            ac, sym = key.split(":", 1)
+            items = ds.get_news(ac, sym, limit=2)
+            for it in items:
+                it["symbol"] = sym
+            all_news.extend(items)
+    if all_news:
+        with st.container(border=True):
+            for item in all_news[:8]:
+                title = item.get("title", "")
+                link = item.get("link")
+                sym = item.get("symbol", "")
+                if link:
+                    st.markdown(f"- **[{sym}]** [{title}]({link})")
+                else:
+                    st.markdown(f"- **[{sym}]** {title}")
+    else:
+        st.info("Không lấy được tin tức vào lúc này.")
+
+    st.divider()
+
+    # --- Giá thị trường real-time ---
+    st.markdown("#### 💹 Giá thị trường")
+    tab_c, tab_vn, tab_w = st.tabs(["🪙 Top 10 Tiền điện tử", "🇻🇳 Top 10 CP Việt Nam", "🌍 Top 10 CP Thế giới"])
+    with tab_c:
+        _render_realtime_board_fast(ds.ASSET_CRYPTO, ds.CRYPTO_TOP10, "home_board_crypto")
+    with tab_vn:
+        st.caption(
+            "⏱️ Bảng CP Việt Nam làm mới mỗi 90 giây (chậm hơn 2 bảng kia) vì nguồn dữ liệu "
+            "vnstock (gói khách) giới hạn ~20 request/phút — cần chừa hạn mức cho các phần khác "
+            "trong app cũng đang dùng vnstock."
+        )
+        _render_realtime_board_slow(ds.ASSET_VN, ds.VN_TOP10, "home_board_vn")
+    with tab_w:
+        _render_realtime_board_fast(ds.ASSET_WORLD, ds.WORLD_TOP10, "home_board_world")
+
+
+@st.fragment(run_every="30s")
+def _render_realtime_board_fast(asset_class, symbols, key):
+    _draw_realtime_board(asset_class, symbols, key)
+
+
+@st.fragment(run_every="90s")
+def _render_realtime_board_slow(asset_class, symbols, key):
+    _draw_realtime_board(asset_class, symbols, key)
+
+
+def _draw_realtime_board(asset_class, symbols, key):
+    df = ds.get_realtime_board(asset_class, symbols)
+    if df.empty:
+        st.info("Không lấy được dữ liệu.")
+        return
+    st.dataframe(
+        df.style.format({"Giá": "{:,.2f}", "% Thay đổi": "{:+.2%}"}, na_rep="—"),
+        width="stretch", hide_index=True, key=f"{key}_df",
+    )
+    st.caption(f"Cập nhật lúc {datetime.now():%H:%M:%S}")
+
+
+# =============================================================================
 # TRANG 1 — MỘT TÀI SẢN
 # =============================================================================
 def page_single_asset():
-    st.subheader("📈 Một tài sản")
+    st.subheader("📈 Đánh Giá Tài Sản")
+    st.markdown(":orange[**Tổng quan tài sản giúp ra quyết định**]")
     with st.sidebar:
         st.markdown("**Chọn tài sản**")
         with st.container(border=True):
@@ -549,7 +705,7 @@ def render_news_tab(asset_class, symbol):
 def page_portfolio():
     st.subheader("💼 Danh mục đầu tư")
 
-    # Nếu vừa bấm "Thêm vào danh mục" từ trang Một tài sản, gộp mã đó vào lựa chọn
+    # Nếu vừa bấm "Thêm vào danh mục" từ trang Đánh Giá Tài Sản, gộp mã đó vào lựa chọn
     # TRƯỚC khi các multiselect được khởi tạo.
     pending = st.session_state.pop("pending_portfolio_add", None)
     if pending:
@@ -624,7 +780,7 @@ def page_portfolio():
         c1, c2 = st.columns([3, 1])
         with c1:
             jump_label = st.selectbox(
-                "🔍 Xem chi tiết 1 mã trong danh mục ở trang 'Một tài sản'",
+                "🔍 Xem chi tiết 1 mã trong danh mục ở trang 'Đánh Giá Tài Sản'",
                 [f"{ac} — {sym}" for ac, sym in picked], key="jump_to_single_select",
             )
         with c2:
@@ -687,6 +843,15 @@ def page_portfolio():
         valid_keys = list(returns_df.columns)
         norm_weights = np.array([weights[k] for k in valid_keys])
         norm_weights = norm_weights / norm_weights.sum()
+
+        # Lưu lại để Trang chủ dùng làm ngữ cảnh tổng quan (tỉ trọng + thống kê từng mã)
+        st.session_state["last_portfolio_weights"] = dict(zip(valid_keys, norm_weights * 100))
+        st.session_state["last_portfolio_per_asset_stats"] = {
+            col: {
+                "expected_return_annual": float(returns_df[col].mean() * pa.TRADING_DAYS),
+                "volatility_annual": float(returns_df[col].std() * (pa.TRADING_DAYS ** 0.5)),
+            } for col in returns_df.columns
+        }
 
         st.write("Đang tải chỉ số benchmark...")
         bench_hist = ds.get_benchmark_history(benchmark_class, start, end)
@@ -1054,7 +1219,7 @@ def page_chatbot():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    # Ngữ cảnh liên kết với 2 trang kia: mã vừa xem ở "Một tài sản" + danh mục vừa
+    # Ngữ cảnh liên kết với 2 trang kia: mã vừa xem ở "Đánh Giá Tài Sản" + danh mục vừa
     # phân tích ở "Danh mục đầu tư" (nếu có). Người dùng có thể tắt bớt nếu muốn.
     last_single = st.session_state.get("last_single_asset")  # (asset_class, symbol) hoặc None
     has_portfolio_ctx = bool(st.session_state.get("last_portfolio_tickers"))
@@ -1087,7 +1252,7 @@ def page_chatbot():
         st.text(context)
         if not last_single and not has_portfolio_ctx:
             st.caption(
-                "Chưa có ngữ cảnh nào — hãy xem qua 1 mã ở trang 'Một tài sản' hoặc phân tích "
+                "Chưa có ngữ cảnh nào — hãy xem qua 1 mã ở trang 'Đánh Giá Tài Sản' hoặc phân tích "
                 "1 danh mục ở 'Danh mục đầu tư' trước, ngữ cảnh sẽ tự xuất hiện ở đây."
             )
 
@@ -1119,7 +1284,8 @@ def page_chatbot():
 # =============================================================================
 # Định nghĩa ở cấp module (không phải trong main()) để các hàm khác trong file
 # có thể gọi st.switch_page(PAGE_...) tạo liên kết điều hướng giữa 3 trang.
-PAGE_SINGLE = st.Page(page_single_asset, title="Một tài sản", icon="📈", url_path="single-asset", default=True)
+PAGE_HOME = st.Page(page_home, title="Trang chủ", icon="🏠", url_path="home", default=True)
+PAGE_SINGLE = st.Page(page_single_asset, title="Đánh Giá Tài Sản", icon="📈", url_path="single-asset")
 PAGE_PORTFOLIO = st.Page(page_portfolio, title="Danh mục đầu tư", icon="💼", url_path="portfolio")
 PAGE_CHATBOT = st.Page(page_chatbot, title="Chatbot", icon="💬", url_path="chatbot")
 
@@ -1133,7 +1299,7 @@ def main():
     if not auth.require_login():
         return  # auth.require_login() đã tự vẽ màn hình đăng nhập + st.stop()
 
-    nav = st.navigation([PAGE_SINGLE, PAGE_PORTFOLIO, PAGE_CHATBOT])
+    nav = st.navigation([PAGE_HOME, PAGE_SINGLE, PAGE_PORTFOLIO, PAGE_CHATBOT])
     nav.run()
 
 

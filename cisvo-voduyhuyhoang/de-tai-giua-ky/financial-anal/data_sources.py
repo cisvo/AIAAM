@@ -51,6 +51,12 @@ CRYPTO_SHORTLIST = {
     "MATIC-USD": "Polygon", "LINK-USD": "Chainlink", "LTC-USD": "Litecoin",
 }
 
+# Top 10 theo vốn hoá ước lượng (thứ tự cố định, KHÔNG alphabet hoá) — dùng cho
+# bảng giá real-time ở Trang chủ, khác với shortlist chọn nhanh ở trên.
+WORLD_TOP10 = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "BRK-B", "TSLA", "JPM", "V"]
+VN_TOP10 = ["VCB", "VIC", "VHM", "HPG", "FPT", "GAS", "MSN", "CTG", "BID", "VNM"]
+CRYPTO_TOP10 = list(CRYPTO_SHORTLIST.keys())[:10]
+
 PERIOD_DAYS = {
     "1 Tháng": 30, "3 Tháng": 91, "6 Tháng": 182, "1 Năm": 365,
     "3 Năm": 365 * 3, "5 Năm": 365 * 5, "Tối đa": 365 * 15,
@@ -414,3 +420,95 @@ def get_news(asset_class: str, symbol: str, limit: int = 8) -> list:
             pass
 
     return items[:limit]
+
+
+# ---------------------------------------------------------------------------
+# Bảng giá gần-thời-gian-thực (dùng cho Trang chủ — Top 10 mỗi nhóm tài sản)
+# ---------------------------------------------------------------------------
+@st.cache_data(ttl=25, show_spinner=False)
+def get_realtime_board(asset_class: str, symbols: list) -> pd.DataFrame:
+    """Trả về DataFrame cột: Mã, Giá, % Thay đổi (so với phiên trước)."""
+    rows = []
+
+    if asset_class in (ASSET_WORLD, ASSET_CRYPTO):
+        try:
+            data = yf.download(symbols, period="5d", interval="1d", progress=False, group_by="ticker")
+            multi = isinstance(data.columns, pd.MultiIndex)
+            for sym in symbols:
+                try:
+                    sdf = data[sym] if multi else data
+                    closes = sdf["Close"].dropna()
+                    if len(closes) >= 2:
+                        last, prev = float(closes.iloc[-1]), float(closes.iloc[-2])
+                        chg = (last / prev - 1) if prev else None
+                    elif len(closes) == 1:
+                        last, chg = float(closes.iloc[-1]), None
+                    else:
+                        last, chg = None, None
+                    rows.append({"Mã": sym, "Giá": last, "% Thay đổi": chg})
+                except Exception:
+                    rows.append({"Mã": sym, "Giá": None, "% Thay đổi": None})
+        except Exception:
+            rows = [{"Mã": s, "Giá": None, "% Thay đổi": None} for s in symbols]
+
+    elif asset_class == ASSET_VN:
+        # Ưu tiên price_board (1 lần gọi cho cả danh sách) — nhanh hơn nhiều và đỡ tốn
+        # hạn mức request so với gọi lặp từng mã. Giới hạn thời gian chờ cứng (12s) vì
+        # vnstock tự retry/backoff nội bộ khá lâu khi API đang bị giới hạn — không để nó
+        # kéo dài làm treo cả trang.
+        try:
+            import concurrent.futures
+            from vnstock import Trading
+
+            def _fetch_board():
+                return Trading(source="VCI").price_board(symbols)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                board = ex.submit(_fetch_board).result(timeout=12)
+
+            if board is not None and not board.empty:
+                cols = [str(c).lower() for c in board.columns]
+
+                def _find_col(*keywords):
+                    for i, c in enumerate(cols):
+                        if any(k in c for k in keywords):
+                            return board.columns[i]
+                    return None
+
+                sym_col = _find_col("symbol", "ticker", "ma_ck", "mack")
+                price_col = _find_col("match_price", "last_price", "close_price", "giaKhopLenh")
+                chg_pct_col = _find_col("change_percent", "pct_change", "percent")
+                ref_col = _find_col("ref_price", "reference")
+
+                if sym_col and price_col:
+                    for _, row in board.iterrows():
+                        sym = str(row[sym_col])
+                        if sym not in symbols:
+                            continue
+                        price = pd.to_numeric(row[price_col], errors="coerce")
+                        chg = None
+                        if chg_pct_col is not None:
+                            chg = pd.to_numeric(row[chg_pct_col], errors="coerce")
+                            if pd.notna(chg) and abs(chg) > 1:  # API trả theo % (vd 2.5) chứ không phải tỉ lệ
+                                chg = chg / 100
+                        elif ref_col is not None:
+                            ref = pd.to_numeric(row[ref_col], errors="coerce")
+                            chg = (price / ref - 1) if ref else None
+                        rows.append({"Mã": sym, "Giá": float(price) if pd.notna(price) else None,
+                                      "% Thay đổi": float(chg) if chg is not None and pd.notna(chg) else None})
+        except Exception:
+            pass
+
+        found_syms = {r["Mã"] for r in rows}
+        for sym in symbols:
+            if sym not in found_syms:
+                # Không fallback gọi lại từng mã ở đây: vnstock tự retry/backoff khá lâu
+                # mỗi lần gọi, nên dồn 10 lần gọi tuần tự có thể khiến cả trang treo rất
+                # lâu khi API đang bị giới hạn. Chấp nhận thiếu dữ liệu (hiện "—") thay vì
+                # kéo dài thời gian tải — người dùng có thể xem chi tiết mã đó ở "Một tài sản".
+                rows.append({"Mã": sym, "Giá": None, "% Thay đổi": None})
+        # sắp xếp lại đúng thứ tự Top 10 gốc
+        order = {s: i for i, s in enumerate(symbols)}
+        rows.sort(key=lambda r: order.get(r["Mã"], 999))
+
+    return pd.DataFrame(rows)
