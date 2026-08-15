@@ -104,7 +104,30 @@ request/phút, có xác nhận qua log lỗi thật khi vượt hạn mức):
    (`concurrent.futures` timeout) — quá thời gian thì trả "—" cho các mã chưa có, không để
    treo trang.
 
+## Banner tin vĩ mô chạy chữ (thêm theo yêu cầu)
+
+Ngay phía trên nội dung mỗi trang (không phải thanh chrome gốc của Streamlit ở trên
+cùng — khu vực đó có nút "Deploy" là do Streamlit kiểm soát, không chỉnh được) là 1
+banner chạy chữ ngang kiểu Bloomberg/Reuters, hiện tin vĩ mô/lãi suất/thị trường chung
+(`render_market_ticker()` trong `app.py`, gọi 1 lần trong `main()` nên hiện trên mọi trang).
+
+Nội dung lấy từ `data_sources.get_macro_headlines()` — tổng hợp tin từ 3 nguồn đại diện:
+- Thế giới: tin gắn với chỉ số S&P 500 (`^GSPC`) — Yahoo Finance thường gắn cả tin vĩ mô
+  lớn (Fed, lãi suất...) vào tin của chỉ số.
+- Crypto: tin gắn với Bitcoin (`BTC-USD`).
+- Việt Nam: tin gắn với 1 ngân hàng lớn (VCB) làm đại diện — vnstock chưa có endpoint
+  tin vĩ mô/NHNN riêng biệt nên đây là lựa chọn best-effort, không phải tin NHNN trực tiếp.
+
+Cache 15 phút (`ttl=900`) để không gọi API quá thường xuyên. Nếu không lấy được tin nào
+(mất mạng, hết hạn mức API...), banner tự ẩn — không hiện thanh trống.
+
+**Đã kiểm thử**: dùng `wkhtmltoimage` render thử banner với dữ liệu giả ra ảnh PNG để soi
+bằng mắt — bố cục, màu sắc, viền bo góc đúng như thiết kế. Hiệu ứng cuộn chữ (CSS
+`@keyframes`) là cú pháp chuẩn, phổ biến, không thể chụp ảnh tĩnh để xác nhận chuyển động
+nhưng cú pháp đã đúng chuẩn W3C.
+
 ## Liên kết giữa 3 trang (sửa sau phản hồi "3 trang tách rời nhau")
+
 
 Trước đó Chatbot có 1 lỗi thật: luôn đọc `symbol=None` nên chưa từng biết bạn đang xem
 mã nào ở "Một tài sản". Đã sửa + thêm điều hướng 2 chiều thật sự:

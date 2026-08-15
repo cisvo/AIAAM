@@ -512,3 +512,35 @@ def get_realtime_board(asset_class: str, symbols: list) -> pd.DataFrame:
         rows.sort(key=lambda r: order.get(r["Mã"], 999))
 
     return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# Tin vĩ mô/lãi suất/thị trường chung — dùng cho banner chạy chữ ở đầu trang
+# ---------------------------------------------------------------------------
+@st.cache_data(ttl=900, show_spinner=False)
+def get_macro_headlines(limit_per_source: int = 4) -> list:
+    """
+    Tổng hợp tin tức mang tính vĩ mô/thị trường chung (lãi suất, chính sách tiền tệ,
+    diễn biến lớn của thị trường...) từ vài nguồn đại diện:
+        - Thị trường thế giới: tin gắn với chỉ số S&P 500 (^GSPC) — Yahoo Finance
+          thường gắn cả tin vĩ mô lớn (Fed, lãi suất...) vào tin của chỉ số.
+        - Crypto: tin gắn với Bitcoin (BTC-USD).
+        - Việt Nam: tin gắn với một ngân hàng lớn (VCB) làm đại diện — vnstock chưa có
+          endpoint tin vĩ mô/NHNN riêng biệt nên đây là lựa chọn best-effort.
+    Trả về list[dict]: {"title":, "link":, "tag":} — tag để gắn nhãn nguồn trên banner.
+    """
+    headlines = []
+    sources = [
+        (ASSET_WORLD, "^GSPC", "🌍 Thế giới"),
+        (ASSET_CRYPTO, "BTC-USD", "🪙 Crypto"),
+        (ASSET_VN, "VCB", "🇻🇳 Việt Nam"),
+    ]
+    for ac, sym, tag in sources:
+        try:
+            items = get_news(ac, sym, limit=limit_per_source)
+            for it in items:
+                it["tag"] = tag
+            headlines.extend(items)
+        except Exception:
+            continue
+    return headlines

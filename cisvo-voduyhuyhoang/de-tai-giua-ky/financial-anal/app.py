@@ -21,6 +21,7 @@ Tính năng chính:
     - Bản đồ phân bổ danh mục theo quốc gia (best-effort)
 """
 from datetime import datetime, timedelta
+from html import escape as html_escape
 
 import numpy as np
 import pandas as pd
@@ -315,15 +316,31 @@ def page_single_asset():
     # Ghi lại mã đang xem để trang Chatbot & Danh mục đầu tư có thể dùng làm ngữ cảnh
     st.session_state["last_single_asset"] = (asset_class, symbol)
 
+    ASSET_BADGE = {
+        ds.ASSET_WORLD: ("Cổ phiếu Thế giới", "blue", "🌍"),
+        ds.ASSET_VN: ("Cổ phiếu Việt Nam", "green", "🇻🇳"),
+        ds.ASSET_CRYPTO: ("Tiền điện tử", "orange", "🪙"),
+    }
+    badge_label, badge_color, badge_icon = ASSET_BADGE.get(asset_class, (asset_class, "gray", "📊"))
+    quick_info = ds.get_summary_info(asset_class, symbol)
+    quick_price = quick_info.get("Previous Close") or quick_info.get("Giá đóng cửa gần nhất")
+
     with st.container(border=True):
-        c1, c2 = st.columns(2)
+        c1, c2 = st.columns([1.6, 1])
         with c1:
-            if st.button(f"➕ Thêm {symbol} vào danh mục đầu tư", width="stretch", key="add_to_portfolio_btn"):
-                st.session_state["pending_portfolio_add"] = (asset_class, symbol)
-                st.switch_page(PAGE_PORTFOLIO)
+            st.badge(badge_label, icon=badge_icon, color=badge_color)
+            st.badge(symbol, color="primary")
+            st.caption(f"Giá gần nhất: **{fmt(quick_price)}**" if quick_price is not None
+                       else "Chưa có dữ liệu giá gần nhất")
         with c2:
-            if st.button(f"💬 Hỏi Chatbot về {symbol}", width="stretch", key="ask_chatbot_btn"):
-                st.switch_page(PAGE_CHATBOT)
+            bc1, bc2 = st.columns(2)
+            with bc1:
+                if st.button("➕ Thêm vào danh mục", width="stretch", key="add_to_portfolio_btn"):
+                    st.session_state["pending_portfolio_add"] = (asset_class, symbol)
+                    st.switch_page(PAGE_PORTFOLIO)
+            with bc2:
+                if st.button("💬 Hỏi Chatbot", width="stretch", key="ask_chatbot_btn"):
+                    st.switch_page(PAGE_CHATBOT)
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📋 Summary", "📈 Chart", "📊 Thống kê & Tài chính", "🔍 Phân tích",
@@ -1280,6 +1297,51 @@ def page_chatbot():
 
 
 # =============================================================================
+# BANNER TIN VĨ MÔ — chạy chữ ngang ở đầu mỗi trang
+# =============================================================================
+def render_market_ticker():
+    headlines = ds.get_macro_headlines()
+    if not headlines:
+        return
+
+    items_html = "".join(
+        f'<span class="ticker-item">{h.get("tag", "")} — {html_escape(h.get("title", ""))}</span>'
+        for h in headlines if h.get("title")
+    )
+    if not items_html:
+        return
+
+    # Nhân đôi nội dung để vòng lặp cuộn liền mạch, không bị giật ở đoạn nối cuối-đầu.
+    marquee_content = items_html + items_html
+
+    st.html(f"""
+    <style>
+    .findash-ticker-wrap {{
+        width: 100%; overflow: hidden; background: #0A1622;
+        border: 1px solid #2A3F58; border-radius: 10px;
+        padding: 8px 0; margin-bottom: 1rem; box-sizing: border-box;
+    }}
+    .findash-ticker-move {{
+        display: inline-block; white-space: nowrap;
+        animation: findash-ticker-scroll 70s linear infinite;
+    }}
+    .findash-ticker-wrap:hover .findash-ticker-move {{ animation-play-state: paused; }}
+    .ticker-item {{
+        display: inline-block; color: #D4AF37; font-size: 0.85rem;
+        font-family: sans-serif; margin-right: 3.5rem;
+    }}
+    @keyframes findash-ticker-scroll {{
+        0% {{ transform: translateX(0); }}
+        100% {{ transform: translateX(-50%); }}
+    }}
+    </style>
+    <div class="findash-ticker-wrap">
+        <div class="findash-ticker-move">{marquee_content}</div>
+    </div>
+    """)
+
+
+# =============================================================================
 # MAIN — theme/logo, auth gate, multipage navigation
 # =============================================================================
 # Định nghĩa ở cấp module (không phải trong main()) để các hàm khác trong file
@@ -1298,6 +1360,8 @@ def main():
 
     if not auth.require_login():
         return  # auth.require_login() đã tự vẽ màn hình đăng nhập + st.stop()
+
+    render_market_ticker()
 
     nav = st.navigation([PAGE_HOME, PAGE_SINGLE, PAGE_PORTFOLIO, PAGE_CHATBOT])
     nav.run()
