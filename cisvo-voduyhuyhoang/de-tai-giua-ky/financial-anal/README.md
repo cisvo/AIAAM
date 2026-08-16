@@ -15,7 +15,7 @@ thực chất (tối ưu hoá danh mục, chỉ báo kỹ thuật, định giá,
 | [5] Monte Carlo Simulation (danh mục) | `render_monte_carlo_tab()`, `pa.monte_carlo_portfolio()` |
 | Hỗ trợ chatbot | `page_chatbot()`, `chatbot.py` (Anthropic Claude API) |
 
-## Công cụ phân tích đầu tư thực chất (thêm sau khi thầy góp ý bản đầu "quá đơn giản")
+## Công cụ phân tích đầu tư thực chất
 
 | Tính năng | Vị trí | Ghi chú |
 |---|---|---|
@@ -44,7 +44,7 @@ thực chất (tối ưu hoá danh mục, chỉ báo kỹ thuật, định giá,
 | **st.login() / cổng mật khẩu** | `auth.py` | 3 chế độ: `none` (mặc định) / `password` / `oidc` (Google) |
 | **Bản đồ phân bổ danh mục** | Tab "🗺️ Phân bổ địa lý" | Best-effort theo trường `country` của yfinance |
 
-## Đã sửa sau phản hồi "UI nhìn như bản nháp"
+## UI
 
 Streamlit theming mặc định chỉ đổi màu, không đổi hình khối/khoảng cách — nên bản đầu
 nhìn phẳng, rời rạc. Đã sửa bằng **cấu hình chính thức của Streamlit** (không phải CSS
@@ -65,7 +65,7 @@ hack):
 - Giảm bớt tiêu đề lặp lại/quá to (`st.title` → `st.subheader`/`st.markdown` ở cấp trang
   và tab) cho đỡ nặng nề.
 
-## Trang chủ (Home) — tổng quan + đề xuất AI (thêm theo yêu cầu)
+## Trang chủ (Home) — tổng quan + đề xuất AI
 
 Trang mặc định khi mở app (`page_home()` trong `app.py`). 4 phần:
 
@@ -81,7 +81,7 @@ Trang mặc định khi mở app (`page_home()` trong `app.py`). 4 phần:
 - **💹 Giá thị trường**: 3 tab Top 10 Tiền điện tử / Top 10 CP Việt Nam / Top 10 CP Thế giới,
   tự làm mới định kỳ (`st.fragment(run_every=...)`).
 
-### Vấn đề thật phát hiện được khi build phần Top 10 real-time (và cách đã sửa)
+### Vấn đề thật phát hiện được khi build phần Top 10 real-time
 
 Trong lúc test bằng `AppTest`, phát hiện **rate limit thật của vnstock** (gói khách: 20
 request/phút, có xác nhận qua log lỗi thật khi vượt hạn mức):
@@ -104,7 +104,7 @@ request/phút, có xác nhận qua log lỗi thật khi vượt hạn mức):
    (`concurrent.futures` timeout) — quá thời gian thì trả "—" cho các mã chưa có, không để
    treo trang.
 
-## Banner tin vĩ mô chạy chữ (thêm theo yêu cầu)
+## Banner tin vĩ mô chạy chữ
 
 Ngay phía trên nội dung mỗi trang (không phải thanh chrome gốc của Streamlit ở trên
 cùng — khu vực đó có nút "Deploy" là do Streamlit kiểm soát, không chỉnh được) là 1
@@ -126,7 +126,7 @@ bằng mắt — bố cục, màu sắc, viền bo góc đúng như thiết kế
 `@keyframes`) là cú pháp chuẩn, phổ biến, không thể chụp ảnh tĩnh để xác nhận chuyển động
 nhưng cú pháp đã đúng chuẩn W3C.
 
-## Liên kết giữa 3 trang (sửa sau phản hồi "3 trang tách rời nhau")
+## Liên kết giữa 3 trang
 
 
 Trước đó Chatbot có 1 lỗi thật: luôn đọc `symbol=None` nên chưa từng biết bạn đang xem
@@ -182,10 +182,6 @@ streamlit run app.py
 
 ## Đã kiểm thử những gì
 
-Sandbox lúc build không có mạng ra ngoài Yahoo Finance/vnstock, nên phần dữ liệu thật
-(giá, báo cáo tài chính, tin tức...) bạn cần tự chạy ở máy có mạng để xác nhận. Những gì
-đã kiểm thử được trong sandbox:
-
 - Biên dịch cú pháp toàn bộ 9 file Python.
 - Test logic độc lập bằng dữ liệu mô phỏng cho toàn bộ module phân tích: CAPM, APT,
   Monte Carlo, VaR/CVaR, tối ưu hoá danh mục (Min Variance/Max Sharpe/Efficient Frontier),
@@ -232,7 +228,7 @@ request/phút, ~4 kỳ báo cáo tài chính. Cần nhiều hơn thì `vnstock.r
 - **streamlit-aggrid**: nếu cài lỗi hoặc không tương thích môi trường, `ui_helpers.show_table()`
   tự động rơi về `st.dataframe`.
 
-## Có thể mở rộng thêm
+## TODO: Mở rộng thêm
 
 - Nhân tố Fama-French thật (nếu tìm được nguồn dữ liệu công khai cho VN).
 - Backtest với phí giao dịch, nhiều chiến lược hơn (RSI, MACD crossover...).
