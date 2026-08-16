@@ -1,0 +1,16 @@
+streamlit>=1.42
+yfinance
+vnstock
+pandas
+numpy
+scipy
+plotly
+matplotlib
+statsmodels
+anthropic
+requests
+beautifulsoup4
+lxml
+streamlit-aggrid
+openpyxl
+pillow
