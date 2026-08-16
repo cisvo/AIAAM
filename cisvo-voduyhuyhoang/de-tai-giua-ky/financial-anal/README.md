@@ -47,7 +47,7 @@ thực chất (tối ưu hoá danh mục, chỉ báo kỹ thuật, định giá,
 ## UI
 
 Streamlit theming mặc định chỉ đổi màu, không đổi hình khối/khoảng cách — nên bản đầu
-nhìn phẳng, rời rạc. Đã sửa bằng **cấu hình chính thức của Streamlit** (không phải CSS
+nhìn phẳng, rời rạc. **cấu hình chính thức của Streamlit** (không phải CSS
 hack):
 
 - `.streamlit/config.toml`: thêm `baseRadius="large"` (bo góc mọi input/button/card/
@@ -129,8 +129,7 @@ nhưng cú pháp đã đúng chuẩn W3C.
 ## Liên kết giữa 3 trang
 
 
-Trước đó Chatbot có 1 lỗi thật: luôn đọc `symbol=None` nên chưa từng biết bạn đang xem
-mã nào ở "Một tài sản". Đã sửa + thêm điều hướng 2 chiều thật sự:
+Chatbot Thêm điều hướng 2 chiều thật sự:
 
 - **Một tài sản → Chatbot**: nút "💬 Hỏi Chatbot về {mã}" — chuyển thẳng sang Chatbot,
   ngữ cảnh tự động gồm đúng mã + số liệu Summary mới nhất của mã đó.
